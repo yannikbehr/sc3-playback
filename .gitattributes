@@ -1,0 +1,2 @@
+test-event.sorted-mseed !text !filter !merge !diff
+test.db !text !filter !merge !diff

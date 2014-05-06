@@ -1,0 +1,13 @@
+- MiniSEED repack zu 512 bytes: libmseed paket von IRIS und in examples ist msrepack:
+  $ msrepack -R 512 -o output.mseed input.mseed
+
+- Sortieren nach Endzeit
+  $ scmssort -E output.mseed > output.sorted.mseed
+
+- Playback Objekte in XML einsammeln
+  $ sceplog -H sc3pb -S EVENTVS -S LOCATIONVS -S MAGNITUDE -S PICKVS -S PICK > output.xml
+
+- XML mit scolv benutzen
+  $ scolv --offline --inventory-db inv.xml
+  -> File -> Open -> output.xml
+
