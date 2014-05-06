@@ -158,8 +158,8 @@ case "$MODE" in
 esac
 
 echo "Starting logging..."
-sceplog -S EVENT -S LOCATION -S MAGNITUDE -S PICK  > $LOGFILE \
---auto-shutdown=1 --shutdown-master-module=scvsmag&
+sceplog -S EVENT -S LOCATION -S MAGNITUDE -S PICK --auto-shutdown=1 \
+--shutdown-master-module=scvsmag > $LOGFILE &
 scvsmaglog --playback --auto-shutdown=1 --shutdown-master-module=scvsmag --savedir=$REPORTDIR &
 
 
