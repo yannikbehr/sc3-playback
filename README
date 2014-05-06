@@ -1,13 +1,60 @@
-- MiniSEED repack zu 512 bytes: libmseed paket von IRIS und in examples ist msrepack:
-  $ msrepack -R 512 -o output.mseed input.mseed
+Running the playback example
+============================
+This directory contains all the necessary scripts to
+do a playback of the Ml 4.2 event on 2012/2/11 in 
+Zug/Switzerland. Please regard the scripts as templates
+that you may have to adapt to your network specific settings. 
+Also bear in mind that the playback uses the SED specific
+SeisComP3 settings under ~/.seiscomp3.
 
-- Sortieren nach Endzeit
-  $ scmssort -E output.mseed > output.sorted.mseed
 
-- Playback Objekte in XML einsammeln
-  $ sceplog -H sc3pb -S EVENTVS -S LOCATIONVS -S MAGNITUDE -S PICKVS -S PICK > output.xml
+Generating the waveform file
+----------------------------
+The script vs-mseed.sh downloads waveforms from an arclink
+server and generates a multiplexed miniSEED file that can
+be used for playbacks. For information on how to use this 
+script run:
 
-- XML mit scolv benutzen
-  $ scolv --offline --inventory-db inv.xml
-  -> File -> Open -> output.xml
+$ ./vs-mseed.h -h
+
+The included waveform file under ./waveforms was generated with 
+the following command:
+
+$ ./vs-mseed.sh -o waveforms/ZUG_11_2_2012.mseed  2012,02,11,22,43,26 2012,02,11,22,48,26 CH "*" "H*" arclink.ethz.ch:18002
+
+
+Running the playback
+--------------------
+An example playback can be run by executing the following command:
+
+$ ./playback.sh --db-disable waveforms/ZUG_11_2_2012.mseed.sorted
+
+This will create the following three files in the current directory:
+scvsmag-processing-info.log (VS log file)
+smi:ch.ethz.sed_sc3seattle_2012czaasn_report.txt (VS report file)
+output.xml (log of all created SC3 objects)
+
+For more information on playback.sh and additional options run:
+
+$ ./playback.sh -h
+
+Analysing the result using scolv
+--------------------------------
+The file output.xml together with the waveform file can be used to analyse
+this event in scolv. First start scolv in offline mode and pass your network
+specific inventory file:
+
+$ scolv --offline --inventory-db inventory_seattle.xml
+
+Now load the SC3 objects:
+-> File -> Open -> output.xml
+
+...and now the waveforms:
+-> Settings -> Configure OriginLocatorView
+...under Global Settings enter in Data Source field:
+file:///home/vs/playback/waveforms/ZUG_11_2_2012.mseed.sorted
+
+Now you can use the picker to look at the waveforms and picks.
+
+
 
