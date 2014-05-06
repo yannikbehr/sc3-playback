@@ -168,11 +168,13 @@ case "$MODE" in
 	realtime) echo "running real-time playback"
 			if [ "$WAVEFORMS" == "false" ]; then
 				msrtsimul -c -m realtime -j $SKIP $DELAYS ${MSEEDFILE}\
-				|scenvelope $FLAGS --start-stop-msg=1 -I - &
+				|scenvelope $FLAGS --start-stop-msg=1\
+                                --shutdown-master-module=scautopick -I - &
 				pid_env=$!
 			else
 				msrtsimul -c -m realtime -j $SKIP $DELAYS ${MSEEDFILE}|\
-				tee >(scenvelope $FLAGS --start-stop-msg=1 -I -) |\
+				tee >(scenvelope $FLAGS --start-stop-msg=1\
+                                --shutdown-master-module=scautopick -I -) |\
 				scrttv $FLAGS -S PICK -S LOCATION --plugins dmvs -N --auto-shutdown=1 \
 				--shutdown-master-module=scenvelope -I - &
 				pid_env=$!
@@ -181,11 +183,13 @@ case "$MODE" in
 	historic) echo "running historic playback"
 			if [ "$WAVEFORMS" == "false" ]; then
 				msrtsimul -c -m historic -j $SKIP $DELAYS ${MSEEDFILE}\
-				|scenvelope $FLAGS --start-stop-msg=1 -I - &
+				|scenvelope $FLAGS --start-stop-msg=1 \
+				--shutdown-master-module=scautopick -I - &
 				pid_env=$!
 			else
 				msrtsimul -c -m historic -j $SKIP $DELAYS ${MSEEDFILE}|\
-				tee >(scenvelope $FLAGS --start-stop-msg=1 -I -) |\
+				tee >(scenvelope $FLAGS --start-stop-msg=1 \
+                                --shutdown-master-module=scautopick -I -) |\
 				scrttv $FLAGS -S VS --plugins dmvs --end-time "$WAVEFORMS" -N --auto-shutdown=1 \
 				--shutdown-master-module=scenvelope -I - &
 				pid_env=$!
