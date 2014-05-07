@@ -38,6 +38,7 @@ For more information on playback.sh and additional options run:
 
 $ ./playback.sh -h
 
+
 Analysing the result using scolv
 --------------------------------
 The file output.xml together with the waveform file can be used to analyse
@@ -56,5 +57,29 @@ file:///home/vs/playback/waveforms/ZUG_11_2_2012.mseed.sorted
 
 Now you can use the picker to look at the waveforms and picks.
 
+
+Showing the alerts in the UserDisplay
+-------------------------------------
+First start the ActiveMQ broker:
+
+$ cd /home/vs/apache-activemq-5.9.1/bin
+$ ./activemq start
+
+Then start the UserDisplay:
+
+$ cd /home/vs/userdisplay-2.4
+$ ./runUNIX.sh &
+
+And now start the same playback as before but in 'realtime' mode. 
+In 'historic' mode the alerts will be in the past and therefore the
+UserDisplay won't show anything.
+
+$ cd /home/vs/playback
+$ ./playback.sh --skip 1 --mode 'realtime' --db-disable waveforms/ZUG_11_2_2012.mseed.sorted
+
+To stop the ActiveMQ broker do:
+
+$ cd /home/vs/apache-activemq-5.9.1/bin
+$ ./activemq stop
 
 
