@@ -25,6 +25,10 @@ $ ./vs-mseed.sh -o waveforms/ZUG_11_2_2012.mseed  2012,02,11,22,43,26 2012,02,11
 
 Running the playback
 --------------------
+First make sure that spread and scmaster are running:
+
+$ seiscomp start
+
 An example playback can be run by executing the following command:
 
 $ ./playback.sh --db-disable waveforms/ZUG_11_2_2012.mseed.sorted
