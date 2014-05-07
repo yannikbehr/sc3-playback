@@ -55,7 +55,7 @@ Now load the SC3 objects:
 ...under Global Settings enter in Data Source field:
 file:///home/vs/playback/waveforms/ZUG_11_2_2012.mseed.sorted
 
-Now you can use the picker to look at the waveforms and picks.
+Now you can use the picker to look at the waveforms and triggers.
 
 
 Showing the alerts in the UserDisplay
@@ -71,8 +71,8 @@ $ cd /home/vs/userdisplay-2.4
 $ ./runUNIX.sh &
 
 And now start the same playback as before but in 'realtime' mode. 
-In 'historic' mode the alerts will be in the past and therefore the
-UserDisplay won't show anything.
+In 'historic' mode the alerts would be in the past and therefore the
+UserDisplay would not show anything.
 
 $ cd /home/vs/playback
 $ ./playback.sh --skip 1 --mode 'realtime' --db-disable waveforms/ZUG_11_2_2012.mseed.sorted
