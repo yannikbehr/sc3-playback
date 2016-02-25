@@ -15,9 +15,12 @@ import shutil
 import signal
 import subprocess as sp
 import sys
+import time
 import traceback
 
 from seiscomp3 import Config, System
+import seiscomp3.Kernel
+import seiscomp3.IO
 
 class PBError(Exception): pass
 
@@ -72,7 +75,115 @@ def setup_config(configdir):
     os.symlink(configdir, default)
 
 
-def run(wf, speed=None, jump=None, delays=None):
+def load_module(path):
+    """
+    Returns a seiscomp3.Kernel.Module instance from a given path with
+    a given name
+    """
+    modname = os.path.splitext(os.path.basename(path))[0].replace('.', '_')
+    f = open(path, 'r')
+    modname = '__seiscomp_modules_' + modname
+    if sys.modules.has_key(modname):
+        mod = sys.modules[modname]
+    else:
+        # create a module
+        mod = imp.new_module(modname)
+        mod.__file__ = path
+
+    # store it in sys.modules
+    sys.modules[modname] = mod
+
+    # our namespace is the module dictionary
+    namespace = mod.__dict__
+
+    # test whether this has been done already
+    if not hasattr(mod, 'Module'):
+        code = f.read()
+        # compile and exec dynamic code in the module
+        exec compile(code, '', 'exec') in namespace
+    module = namespace.get('Module')
+    return module
+
+
+def module_compare(a, b):
+    if a.order < b.order: return -1
+    if a.order > b.order: return 1
+    if a.name < b.name: return -1
+    if a.name > b.name: return 1
+    return 0
+
+
+def load_init_modules(path):
+    mods = []
+
+    files = glob.glob(os.path.join(path, "*.py"))
+    for f in files:
+        try: pmod = load_module(f)  # imp.load_source(mod_name, f)
+        except Exception, exc:
+            error(("%s: " % f) + str(exc))
+            continue
+
+        try: mod = pmod(env)  # .Module(env)
+        except Exception, exc:
+            error(("%s: " % f) + str(exc))
+            continue
+
+        mods.append(mod)
+    # mods = sorted(mods, key=lambda mod: mod.order)
+    mods = sorted(mods, cmp=module_compare)
+    return mods
+
+
+def get_enabled_modules():
+    """
+    Return a list of enabled modules in the order in which they would be
+    called by 'seiscomp start'.
+    """
+    INIT_PATH = os.path.join(ei.installDir(), "etc", "init")
+    mods = load_init_modules(INIT_PATH)
+    startup_modules = []
+    for _m in mods:
+        if isinstance(_m, seiscomp3.Kernel.CoreModule):
+            startup_modules.append(_m.name)
+        elif env.isModuleEnabled(_m.name):
+            startup_modules.append(_m.name)
+        else:
+            continue
+    return startup_modules
+
+
+def get_start_time(fn):
+    """
+    Find the earliest end-time of all records in the waveform file.
+    """
+    stream = seiscomp3.IO.RecordStream.Open('file://%s' % fn)
+    input = seiscomp3.IO.RecordInput(stream, seiscomp3.Core.Array.INT,
+                                     seiscomp3.Core.Record.SAVE_RAW)
+    tmin = datetime.datetime.utcnow()
+    while True:
+        try:
+            rec = input.next()
+        except:
+            break
+        if not rec:
+            break
+        te = rec.endTime().toString("%FT%T.%4fZ")
+        ts = rec.startTime().toString("%FT%T.%4fZ")
+        dts = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%fZ")
+        dte = datetime.datetime.strptime(te, "%Y-%m-%dT%H:%M:%S.%fZ")
+        if dte < tmin:
+            tmin = dte
+            Id = rec.streamID()
+    return tmin
+
+
+def run(wf, speed=None, jump=None, delays=None, mode='realtime',
+        startupdelay=7, args=''):
+    """
+    Start SeisComP3 modules and the waveform playback.
+    """
+    system(['seiscomp', 'stop'])
+    mods = get_enabled_modules()
     if not os.path.isfile(wf):
         raise PBError('%s does not exist.' % wf)
     command = ["msrtsimul"]
@@ -82,19 +193,34 @@ def run(wf, speed=None, jump=None, delays=None):
         command += ["-j", jump]
     if delays is not None:
         command += ["-d", delays]
-    command.append(wf)
-    os.environ['LD_PRELOAD'] = '/usr/lib/faketime/libfaketime.so.1'
-    os.environ['FAKETIME'] = "@2012-02-11 22:42:39.241600"
-    proc = sp.Popen(command, shell=False, env=os.environ)
-    proc1 = sp.call(['seiscomp', 'start'], shell=False, env=os.environ)
-    proc.wait()
-    # system(['seiscomp', 'restart'])
-    system(['seiscomp', 'stop'])
+
+    if mode != 'realtime':
+        command += ['-m', 'historic']
+        command.append(wf)
+        t0 = get_start_time(wf)
+        t0 -= datetime.timedelta(seconds=startupdelay)
+        os.environ['LD_PRELOAD'] = '/usr/lib/faketime/libfaketime.so.1'
+        os.environ['FAKETIME'] = "@%s" % t0
+        ts = time.time()
+        system(['seiscomp', 'start'])
+        while (time.time() - ts) < startupdelay:
+            time.sleep(0.1)
+        system(command)
+        system(['seiscomp', 'stop'])
+    else:
+        system(['seiscomp', 'start'])
+        while (time.time() - ts) < startupdelay:
+            time.sleep(0.1)
+        system(command)
+        system(['seiscomp', 'stop'])
 
 
 if __name__ == '__main__':
     import argparse
     ei = System.Environment.Instance()
+    # Create environment which supports queries for various SeisComP
+    # directoris and sets PATH, LD_LIBRARY_PATH and PYTHONPATH
+    env = seiscomp3.Kernel.Environment(ei.installDir())
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('database', help='Absolute path to an sqlite3 \
@@ -127,33 +253,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     try:
-        setup_config(args.config_dir)
-        setup_seedlink(args.fifo)
-        run(args.waveforms, speed=args.speed, jump=args.jump,
-            delays=args.delays)
+        # setup_config(args.config_dir)
+        # setup_seedlink(args.fifo)
+        # run(args.waveforms, speed=args.speed, jump=args.jump,
+        #    delays=args.delays, mode=args.mode)
+        print get_enabled_modules()
     except PBError, e:
         print e
         sys.exit()
-
-
-#####################################################
-# # Playback script to test
-#
-# seiscomp stop
-#
-# sudo service postgresql stop
-# sudo cp -a /var/lib/postgresql_empty_configured /var/lib/postgresql
-# sudo service postgresql start
-#
-# rm -r /usr/local/var/lib/seedlink/buffer/*
-# seiscomp start spread scmaster NLoB_amp NLoB_mag NLoB_reloc NTeT_amp \
-# NTeT_mag NTeT_reloc scamp scenvelope scevent scmag \
-# scvsmag scvsmaglog seedlink scautoloc NLoB_auloc NTeT_auloc
-#
-# #scautoloc --playback &
-# #NLoB_auloc --playback &
-# #NTeT_auloc --playback &
-# #scvsmag --playback &
-# msrtsimul -j 1 -c -m realtime $0| \
-# tee >(scautopick -I -) >(NLoB_apick -I -) >(NTeT_apick -I -) > /usr/local/var/run/seedlink/mseedfifo
-
