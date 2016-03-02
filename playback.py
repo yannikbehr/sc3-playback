@@ -15,6 +15,7 @@ import shutil
 import signal
 import subprocess as sp
 import sys
+import tempfile
 import time
 import traceback
 
@@ -23,6 +24,24 @@ import seiscomp3.Kernel
 import seiscomp3.IO
 
 class PBError(Exception): pass
+
+def start_module(mod, params=''):
+    """
+    Monkey patch the start parameter routine to pass in additional command line
+    arguments.
+    """
+    touch(env.runFile(mod.name))
+    old_params = mod._get_start_params()
+    new_params = lambda: old_params + ' ' + params
+    mod._get_start_params = new_params
+    return mod.start()
+
+
+##### The following functions were copied from the seiscomp startup script ####
+def touch(filename):
+    try: open(filename, 'w').close()
+    except Exception, exc:
+        PBError(str(exc))
 
 def system(args):
     proc = sp.Popen(args, shell=False, env=os.environ)
@@ -37,43 +56,6 @@ def system(args):
             except: pass
             sys.stderr.write("Exception: %s\n" % str(e))
             continue
-
-def setup_seedlink(fifofn):
-    bufferdir = os.path.join(ei.installDir(), 'var', 'lib', 'seedlink', 'buffer')
-    if os.path.isdir(bufferdir):
-        names = os.listdir(bufferdir)
-        # Clear the buffer, otherwise seedlink will reject waveforms identical to
-        # previous playbacks, e.g. during historic playbacks
-        for _e in names:
-            dname = os.path.join(bufferdir, _e)
-            if os.path.isdir(dname):
-                shutil.rmtree(dname)
-    # check whether the fifo file exists
-    if not os.path.exists(fifofn):
-        raise PBError('%s does not exist.' % fifofn)
-    if not os.path.stat.S_ISFIFO(os.stat(fifofn).st_mode):
-        raise PBError('%s is not a fifo file.' % fifofn)
-
-
-def setup_config(configdir):
-    default = ei.configDir()
-    if configdir == default:
-        return
-    if os.path.islink(default):
-        # default configuration directory is already a link so it's
-        # save to remove it without backup
-        os.unlink(default)
-    elif os.path.isdir(default):
-        # default configuration directory is a regular directory so we
-        # back it up
-        d = datetime.datetime.now().strftime("%Y%j%H%M%S")
-        newdir = '_'.join((default, d, 'backup'))
-        if os.path.isdir(newdir):
-            raise PBError('Cannot backup %s: %s already exists.' % \
-                          (default, newdir))
-        os.rename(default, newdir)
-    os.symlink(configdir, default)
-
 
 def load_module(path):
     """
@@ -118,35 +100,111 @@ def load_init_modules(path):
 
     files = glob.glob(os.path.join(path, "*.py"))
     for f in files:
-        try: pmod = load_module(f)  # imp.load_source(mod_name, f)
+        try: pmod = load_module(f)
         except Exception, exc:
             error(("%s: " % f) + str(exc))
             continue
 
-        try: mod = pmod(env)  # .Module(env)
+        try: mod = pmod(env)
         except Exception, exc:
             error(("%s: " % f) + str(exc))
             continue
 
         mods.append(mod)
-    # mods = sorted(mods, key=lambda mod: mod.order)
     mods = sorted(mods, cmp=module_compare)
     return mods
+###############################################################################
+
+def setup_seedlink(fifofn):
+    """
+    Make sure the fifo file exists and that the seedlink buffer is empty
+    otherwise seedlink will reject waveforms identical to previous playbacks,
+    e.g. during historic playbacks
+    """
+    bufferdir = os.path.join(ei.installDir(), 'var', 'lib', 'seedlink', 'buffer')
+    if os.path.isdir(bufferdir):
+        names = os.listdir(bufferdir)
+        for _e in names:
+            dname = os.path.join(bufferdir, _e)
+            if os.path.isdir(dname):
+                shutil.rmtree(dname)
+    # check whether the fifo file exists
+    if not os.path.exists(fifofn):
+        raise PBError('%s does not exist.' % fifofn)
+    if not os.path.stat.S_ISFIFO(os.stat(fifofn).st_mode):
+        raise PBError('%s is not a fifo file.' % fifofn)
 
 
-def get_enabled_modules():
+def setup_config(configdir, db):
+    default = ei.configDir()
+    if configdir == default:
+        return
+    if os.path.islink(default):
+        # default configuration directory is already a link so it's
+        # save to remove it without backup
+        os.unlink(default)
+    elif os.path.isdir(default):
+        # default configuration directory is a regular directory so we
+        # back it up
+        d = datetime.datetime.now().strftime("%Y%j%H%M%S")
+        newdir = '_'.join((default, d, 'backup'))
+        if os.path.isdir(newdir):
+            raise PBError('Cannot backup %s: %s already exists.' % \
+                          (default, newdir))
+        os.rename(default, newdir)
+    os.symlink(configdir, default)
+
+    # scmaster's database connection can't be set on the command line so we
+    # have to generate a temporary config file that sets the database
+    # connection
+    # tmp_config = tempfile.NamedTemporaryFile()
+    # tmp_config.close()
+    tmp_config = '/tmp/scmaster_tmp.cfg'
+    cfg_tmp = Config.Config()
+    cfg = Config.Config()
+    ei.initConfig(cfg, 'scmaster')
+    for cfg_entry in ['msgGroups']:
+        cfg_tmp.setStrings(cfg_entry, cfg.getStrings(cfg_entry))
+    try:
+        s = cfg.getStrings('plugins')
+    except:
+        # no plugins set
+        cfg_tmp.setString('plugins', 'dbplugin')
+    else:
+        it = s.begin()
+        found = False
+        while it != s.end():
+            pi = it.next()
+            if pi == 'dbplugin':
+                found = True
+        if not found:
+            s.append('dbplugin')
+        cfg_tmp.setStrings('plugins', s)
+    cfg_tmp.setString('core.plugins', 'dbsqlite3')
+    cfg_tmp.setString('plugins.dbPlugin.dbDriver', 'sqlite3')
+    cfg_tmp.setString('plugins.dbPlugin.readConnection', db)
+    cfg_tmp.setString('plugins.dbPlugin.writeConnection', db)
+    cfg_tmp.setString('admin.adminname', '')
+    cfg_tmp.setString('admin.password', '')
+    cfg_tmp.writeConfig(tmp_config)
+    return tmp_config
+
+
+def get_enabled_modules(exclude=[]):
     """
     Return a list of enabled modules in the order in which they would be
     called by 'seiscomp start'.
     """
     INIT_PATH = os.path.join(ei.installDir(), "etc", "init")
     mods = load_init_modules(INIT_PATH)
-    startup_modules = []
+    startup_modules = {}
     for _m in mods:
+        if _m.name in exclude:
+            continue
         if isinstance(_m, seiscomp3.Kernel.CoreModule):
-            startup_modules.append(_m.name)
+            startup_modules[_m.name] = _m
         elif env.isModuleEnabled(_m.name):
-            startup_modules.append(_m.name)
+            startup_modules[_m.name] = _m
         else:
             continue
     return startup_modules
@@ -177,49 +235,69 @@ def get_start_time(fn):
     return tmin
 
 
-def run(wf, speed=None, jump=None, delays=None, mode='realtime',
-        startupdelay=7, args=''):
+def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
+        mode='realtime', startupdelay=15, args=''):
     """
     Start SeisComP3 modules and the waveform playback.
     """
-    system(['seiscomp', 'stop'])
-    mods = get_enabled_modules()
     if not os.path.isfile(wf):
         raise PBError('%s does not exist.' % wf)
-    command = ["msrtsimul"]
+    if not os.path.isdir(config_dir):
+        raise PBError('%s does not exist.' % config_dir)
+    system(['seiscomp', 'stop'])
+
+    scmaster_cfg = setup_config(config_dir, database)
+    setup_seedlink(fifo)
+
+    # construct msrtsimul
+    command = ["seiscomp", "exec", "msrtsimul"]
     if speed is not None:
         command += ["-s", speed]
     if jump is not None:
         command += ["-j", jump]
     if delays is not None:
         command += ["-d", delays]
-
     if mode != 'realtime':
         command += ['-m', 'historic']
-        command.append(wf)
-        t0 = get_start_time(wf)
-        t0 -= datetime.timedelta(seconds=startupdelay)
-        os.environ['LD_PRELOAD'] = '/usr/lib/faketime/libfaketime.so.1'
-        os.environ['FAKETIME'] = "@%s" % t0
-        ts = time.time()
-        system(['seiscomp', 'start'])
+    command.append(wf)
+
+    # start SC3 modules
+    mods = get_enabled_modules()
+    processes = []
+    try:
+        if mode != 'realtime':
+            t0 = get_start_time(wf)
+            t0 -= datetime.timedelta(seconds=startupdelay)
+            print "Start time %s" % t0
+            os.environ['LD_PRELOAD'] = '/usr/lib/faketime/libfaketime.so.1'
+            ts = time.time()
+            # Set system time in seconds relative to UTC now
+            os.environ['FAKETIME'] = "%f" % (time.mktime(t0.timetuple()) - ts)
+        else:
+            ts = time.time()
+            startupdelay = 0
+        start_module(mods.pop('kernel'))
+        start_module(mods.pop('spread'))
+        start_module(mods.pop('seedlink'))
+        start_module(mods.pop('scmaster'), '--config %s' % scmaster_cfg)
+        for _n, _m in mods.iteritems():
+            start_module(mods[_n],
+                         '--plugins dbsqlite3 -d sqlite3://%s' % database)
         while (time.time() - ts) < startupdelay:
             time.sleep(0.1)
+        print "Starting %s " % ('msrtsimul')
         system(command)
         system(['seiscomp', 'stop'])
-    else:
-        system(['seiscomp', 'start'])
-        while (time.time() - ts) < startupdelay:
-            time.sleep(0.1)
-        system(command)
+    except KeyboardInterrupt:
+        system(['seiscomp', 'stop'])
+    except Exception, e:
+        sys.stderr.write("Exception: %s\n" % str(e))
         system(['seiscomp', 'stop'])
 
 
 if __name__ == '__main__':
     import argparse
     ei = System.Environment.Instance()
-    # Create environment which supports queries for various SeisComP
-    # directoris and sets PATH, LD_LIBRARY_PATH and PYTHONPATH
     env = seiscomp3.Kernel.Environment(ei.installDir())
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -253,11 +331,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     try:
-        # setup_config(args.config_dir)
-        # setup_seedlink(args.fifo)
-        # run(args.waveforms, speed=args.speed, jump=args.jump,
-        #    delays=args.delays, mode=args.mode)
-        print get_enabled_modules()
+        run(args.waveforms, args.database, args.config_dir, args.fifo,
+            speed=args.speed, jump=args.jump, delays=args.delays,
+            mode=args.mode)
     except PBError, e:
         print e
         sys.exit()
