@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 """
-Run real-time or fast playbacks to test new configuration settings and debug
-problems observed during real-time operations. By default all enabled modules
-are included in the playback.
+Run real-time or historic playbacks to test new configuration settings and debug
+problems observed during real-time operations. All core modules, seedlink, and
+all modules that were enabled using 'seiscomp enable modulename' are included
+in the playback.
 """
 
 import datetime
@@ -236,7 +237,7 @@ def get_start_time(fn):
 
 
 def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
-        mode='realtime', startupdelay=15, args=''):
+        mode='realtime', startupdelay=15, args='', eventfile=None):
     """
     Start SeisComP3 modules and the waveform playback.
     """
@@ -249,7 +250,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
     scmaster_cfg = setup_config(config_dir, database)
     setup_seedlink(fifo)
 
-    # construct msrtsimul
+    # construct msrtsimul command
     command = ["seiscomp", "exec", "msrtsimul"]
     if speed is not None:
         command += ["-s", speed]
@@ -260,6 +261,19 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
     if mode != 'realtime':
         command += ['-m', 'historic']
     command.append(wf)
+
+    # Construct scdispatch command
+    if eventfile is not None:
+        if not os.path.isfile(eventfile):
+            raise PBError('%s does not exist' % eventfile)
+        dispatch_cmd = ['seiscomp', 'exec', 'scdispatch']
+        dispatch_cmd += ['-i', eventfile, '-O', 'add']
+        # if we run in historic mode merge origins
+        if mode != 'realtime':
+            routingtable = 'Pick:PICK,Amplitude:AMPLITUDE,Origin:LOCATION,'
+            routingtable += 'Magnitude:MAGNITUDE,StationMagnitude:MAGNITUDE,'
+            routingtable += 'FocalMechanism:FOCMECH'
+            dispatch_cmd += ['--routingtable', routingtable]
 
     # start SC3 modules
     mods = get_enabled_modules()
@@ -283,12 +297,15 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         for _n, _m in mods.iteritems():
             start_module(mods[_n],
                          '--plugins dbsqlite3 -d sqlite3://%s' % database)
-        while (time.time() - ts) < startupdelay:
-            time.sleep(0.1)
-        print "Starting %s " % ('msrtsimul')
+        while (time.time() - ts) < startupdelay - 0.5:
+            time.sleep(0.01)
         system(command)
+        if eventfile is not None:
+            system(dispatch_cmd)
         system(['seiscomp', 'stop'])
     except KeyboardInterrupt:
+        if eventfile is not None:
+            system(dispatch_cmd)
         system(['seiscomp', 'stop'])
     except Exception, e:
         sys.stderr.write("Exception: %s\n" % str(e))
@@ -333,7 +350,7 @@ if __name__ == '__main__':
     try:
         run(args.waveforms, args.database, args.config_dir, args.fifo,
             speed=args.speed, jump=args.jump, delays=args.delays,
-            mode=args.mode)
+            mode=args.mode, eventfile=args.events)
     except PBError, e:
         print e
         sys.exit()
