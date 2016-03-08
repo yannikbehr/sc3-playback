@@ -251,16 +251,13 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
     setup_seedlink(fifo)
 
     # construct msrtsimul command
-    command = ["seiscomp", "exec", "msrtsimul"]
+    command = ["seiscomp", "exec", "./msrtsimul.py"]
     if speed is not None:
         command += ["-s", speed]
     if jump is not None:
         command += ["-j", jump]
     if delays is not None:
         command += ["-d", delays]
-    if mode != 'realtime':
-        command += ['-m', 'historic']
-    command.append(wf)
 
     # Construct scdispatch command
     if eventfile is not None:
@@ -280,7 +277,9 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
     processes = []
     try:
         if mode != 'realtime':
+            command += ['-m', 'historic']
             t0 = get_start_time(wf)
+            command += ['-t', str(t0)]
             t0 -= datetime.timedelta(seconds=startupdelay)
             print "Start time %s" % t0
             os.environ['LD_PRELOAD'] = '/usr/lib/faketime/libfaketime.so.1'
@@ -297,8 +296,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         for _n, _m in mods.iteritems():
             start_module(mods[_n],
                          '--plugins dbsqlite3 -d sqlite3://%s' % database)
-        while (time.time() - ts) < startupdelay - 0.5:
-            time.sleep(0.01)
+        command.append(wf)
         system(command)
         if eventfile is not None:
             system(dispatch_cmd)
