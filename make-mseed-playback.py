@@ -4,15 +4,15 @@ import sys, time, traceback
 import seiscomp3.Client, seiscomp3.DataModel
 import re
 
-stream_whitelist = ["HH", "EH","HG","HN"]
-component_whitelist = [] # set to ["Z"] for vertical component only
+stream_whitelist = ["HH", "EH", "HG", "HN"]
+component_whitelist = []  # set to ["Z"] for vertical component only
 network_blacklist = ["DK"]
-network_whitelist = [] # all except blacklist
+network_whitelist = []  # all except blacklist
 
 # seconds before and after origin time
-before, after = 600,1200
+before, after = 60, 120
 regex = re.compile('/')
-sort = True   # will produce sorted files with ".sorted-mseed" extension
+sort = True  # will produce sorted files with ".sorted-mseed" extension
 
 
 def filterStreams(streams):
@@ -23,19 +23,19 @@ def filterStreams(streams):
     filtered = []
 
     for net, sta, loc, cha in streams:
-        if cha[:2] in [ "HH", "SH" ] and (net, sta, loc, "BH"+cha[-1]) in streams:
+        if cha[:2] in [ "HH", "SH" ] and (net, sta, loc, "BH" + cha[-1]) in streams:
             continue
-        filtered.append( (net, sta, loc, cha) )
+        filtered.append((net, sta, loc, cha))
 
     return filtered
 
 
-def getCurrentStreams(dbr,now=seiscomp3.Core.Time.GMT()):
+def getCurrentStreams(dbr, now=seiscomp3.Core.Time.GMT()):
     inv = seiscomp3.DataModel.Inventory()
     dbr.loadNetworks(inv)
 
     result = []
-    
+
     for inet in xrange(inv.networkCount()):
         network = inv.network(inet)
         if network_blacklist and network.code()     in network_blacklist:
@@ -67,7 +67,7 @@ def getCurrentStreams(dbr,now=seiscomp3.Core.Time.GMT()):
                     if stream.code()[:2] not in stream_whitelist:
                         continue
 
-                    result.append( (network.code(), station.code(), loc.code(), stream.code()) )
+                    result.append((network.code(), station.code(), loc.code(), stream.code()))
 
     return filterStreams(result)
 
@@ -100,7 +100,7 @@ class DumperApp(seiscomp3.Client.Application):
                 self.commandline().addStringOption("Dump", "event,E", "ID of event to dump")
                 self.commandline().addStringOption("Dump", "start", "Start time")
                 self.commandline().addStringOption("Dump", "end", "End time")
-                                                
+
                 self.commandline().addOption("Dump", "unsorted,U", "produce unsorted output (not suitable for direct playback!)")
             except:
                 seiscomp3.Logging.warning("caught unexpected error %s" % sys.exc_info())
@@ -110,7 +110,7 @@ class DumperApp(seiscomp3.Client.Application):
 
     def get_and_write_data(self, t1, t2, out):
         dbr = seiscomp3.DataModel.DatabaseReader(self.database())
-        streams = getCurrentStreams(dbr,t1)
+        streams = getCurrentStreams(dbr, t1)
 
         # split all streams into groups of same net
         netsta_streams = {}
@@ -118,14 +118,14 @@ class DumperApp(seiscomp3.Client.Application):
             netsta = net
             if not netsta in netsta_streams:
                 netsta_streams[netsta] = []
-            netsta_streams[netsta].append( (net, sta, loc, cha) )
+            netsta_streams[netsta].append((net, sta, loc, cha))
 
         data = []
         netsta_keys = netsta_streams.keys()
         netsta_keys.sort()
         for netsta in netsta_keys:
 
-            number_of_attempts = 1 # experts only: increase in case of connection problems, normally not needed
+            number_of_attempts = 1  # experts only: increase in case of connection problems, normally not needed
             for attempt in xrange(number_of_attempts):
                 if self.isExitRequested(): return
 
@@ -148,12 +148,12 @@ class DumperApp(seiscomp3.Client.Application):
 
                     count += 1
                     if sort:
-                        data.append( (rec.endTime(), rec.raw().str()) )
+                        data.append((rec.endTime(), rec.raw().str()))
                     else:
                         out.write("%s" % rec.raw().str())
 
                 sys.stderr.write("Read %d records for %d streams\n" % (count, len(netsta_streams[netsta])))
-                if count > 0 or attempt+1 == number_of_attempts:
+                if count > 0 or attempt + 1 == number_of_attempts:
                     break
                 if self.isExitRequested(): return
                 sys.stderr.write("Trying again\n")
@@ -173,7 +173,7 @@ class DumperApp(seiscomp3.Client.Application):
                 previous = raw
 
 
-    def dump(self, eventID,start=None,end=None):
+    def dump(self, eventID, start=None, end=None):
         if start and end:
             try:
                 filename = start.toString("%FT%T")
@@ -181,14 +181,14 @@ class DumperApp(seiscomp3.Client.Application):
                     out = "%s-sorted-mseed" % (filename)
                 else:
                     out = "%s-unsorted-mseed" % (filename)
-                out = file(out,'w')
-                self.get_and_write_data(start,end,out)
+                out = file(out, 'w')
+                self.get_and_write_data(start, end, out)
                 return True
             except:
                 info = traceback.format_exception(*sys.exc_info())
                 for i in info: sys.stderr.write(i)
                 return False
-    
+
         self._dbq = self.query()
         evt = self._dbq.loadObject(seiscomp3.DataModel.Event.TypeInfo(), eventID)
         evt = seiscomp3.DataModel.Event.Cast(evt)
@@ -196,7 +196,7 @@ class DumperApp(seiscomp3.Client.Application):
             raise TypeError, "unknown event '" + eventID + "'"
 
         originID = evt.preferredOriginID()
-        org = self._dbq.loadObject(seiscomp3.DataModel.Origin.TypeInfo(), originID) 
+        org = self._dbq.loadObject(seiscomp3.DataModel.Origin.TypeInfo(), originID)
         org = seiscomp3.DataModel.Origin.Cast(org)
 
         magID = evt.preferredMagnitudeID()
@@ -206,8 +206,8 @@ class DumperApp(seiscomp3.Client.Application):
 #        now = seiscomp3.Core.Time.GMT()
         try:
             val = mag.magnitude().value()
-            filename = regex.sub('_',eventID)
-            
+            filename = regex.sub('_', eventID)
+
             if sort:
                 out = "%s-M%3.1f.sorted-mseed" % (filename, val)
             else:
@@ -217,7 +217,7 @@ class DumperApp(seiscomp3.Client.Application):
             t0 = org.time().value()
             t1, t2 = t0 + seiscomp3.Core.TimeSpan(-before), t0 + seiscomp3.Core.TimeSpan(after)
 
-            self.get_and_write_data(t1,t2,out)
+            self.get_and_write_data(t1, t2, out)
             return True
 
         except:
@@ -234,7 +234,7 @@ class DumperApp(seiscomp3.Client.Application):
                 starttime = seiscomp3.Core.Time.FromString(startstring, "%FT%T")
                 endstring = self.commandline().optionString('end')
                 endtime = seiscomp3.Core.Time.FromString(endstring, "%FT%T")
-                if not self.dump(None,start=starttime,end=endtime):
+                if not self.dump(None, start=starttime, end=endtime):
                     return False
             elif self.commandline().hasOption("event"):
                 evid = self.commandline().optionString("event")
@@ -242,8 +242,8 @@ class DumperApp(seiscomp3.Client.Application):
                     return False
             else:
                 sys.stderr.write("Either --start and --end or --event need to be provided.")
-                return False               
-                
+                return False
+
         except:
             info = traceback.format_exception(*sys.exc_info())
             for i in info: sys.stderr.write(i)
