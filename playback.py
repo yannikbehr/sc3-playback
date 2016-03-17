@@ -139,11 +139,12 @@ def setup_seedlink(fifofn):
 def setup_config(configdir, db):
     default = ei.configDir()
     if configdir == default:
-        return
-    if os.path.islink(default):
+        pass
+    elif os.path.islink(default):
         # default configuration directory is already a link so it's
         # save to remove it without backup
         os.unlink(default)
+        os.symlink(configdir, default)
     elif os.path.isdir(default):
         # default configuration directory is a regular directory so we
         # back it up
@@ -153,7 +154,7 @@ def setup_config(configdir, db):
             raise PBError('Cannot backup %s: %s already exists.' % \
                           (default, newdir))
         os.rename(default, newdir)
-    os.symlink(configdir, default)
+        os.symlink(configdir, default)
 
     # scmaster's database connection can't be set on the command line so we
     # have to generate a temporary config file that sets the database
@@ -295,7 +296,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         start_module(mods.pop('scmaster'), '--config %s' % scmaster_cfg)
         for _n, _m in mods.iteritems():
             start_module(mods[_n],
-                         '--plugins dbsqlite3 -d sqlite3://%s' % database)
+                         '--plugins dbsqlite3,evscore,dmvs,dmsm -d sqlite3://%s' % database)
         command.append(wf)
         system(command)
         if eventfile is not None:
