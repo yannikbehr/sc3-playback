@@ -13,6 +13,35 @@ be tested.
 The main script is `playback.sh`:
 
     $ ./playback.sh -h
+    Usage: ./playback.sh [Options] action
+
+    Arguments:
+        action          Decide what to do:
+                        prep: Prepare playback files
+                        pb: run playback (requires a previous 'prep')
+                        all: do both in one go
+    Options:
+        -h              Show this message.
+        --configdir     Configuration directory to use. (Default: /home/sysop/.seiscomp3).
+    Event IDs:
+        --evid          Give an eventID for playback.
+        --fin           Give a file with one eventID per line for playback.
+
+    Time window
+        --start         Give the starttime of a playback time window. Note that
+                        these options are mutually exclusive with the Event ID
+                        options.
+        --end           Give the endtime of a playback time window. Note that these
+                        options are mutually exclusive with the Event ID options.
+
+    Playback
+        --mode          Choose between 'realtime' and 'historic'. For 'realtime' the
+                        records in the input file will get a new timestamp relative
+                        to the current system time at startup. For 'historic' the
+                        input records will keep their original timestamp.
+                        (Default: 'historic')
+
+
 
 ## Examples
 ### Example 1: Run playback of a single event
