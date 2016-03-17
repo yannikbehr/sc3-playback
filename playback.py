@@ -296,7 +296,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         start_module(mods.pop('scmaster'), '--config %s' % scmaster_cfg)
         for _n, _m in mods.iteritems():
             start_module(mods[_n],
-                         '--plugins dbsqlite3 -d sqlite3://%s' % database)
+                         '--plugins dbsqlite3,evscore,dmvs,dmsm -d sqlite3://%s' % database)
         command.append(wf)
         system(command)
         if eventfile is not None:
