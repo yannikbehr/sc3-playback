@@ -1,6 +1,6 @@
 # SeisComP3 playbacks
 
-The scripts in this directory can be used to run playbacks in SeisComP3 (SC3).
+This collection of scripts can be used to run playbacks in SeisComP3 (SC3).
 Since playback results are stored in an sqlite3 database, sqlite3 support has to be
 enabled in SC3.
 
