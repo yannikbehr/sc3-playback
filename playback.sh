@@ -12,7 +12,7 @@ END=""
 CONFIGDIR="${HOME}/.seiscomp3"
 FILEIN=""
 ACTION=""
-
+MODE="historic"
 
 function usage(){
 cat <<EOF
@@ -25,8 +25,7 @@ Arguments:
                       all: do both in one go 
 Options:
     -h              Show this message.
-     --configdir     Configuration directory to use (if other than 
-                     ${HOME}/.seiscomp3).
+     --configdir     Configuration directory to use. (Default: ${HOME}/.seiscomp3).
   Event IDs:
     --evid          Give an eventID for playback.
     --fin           Give a file with one eventID per line for playback.
@@ -37,6 +36,13 @@ Options:
                     options.
     --end           Give the endtime of a playback time window. Note that these
                     options are mutually exclusive with the Event ID options.
+                    
+  Playback
+    --mode          Choose between 'realtime' and 'historic'. For 'realtime' the
+                    records in the input file will get a new timestamp relative 
+                    to the current system time at startup. For 'historic' the 
+                    input records will keep their original timestamp. 
+                    (Default: 'historic')
 
 EOF
 }
@@ -97,6 +103,12 @@ if [ -n "$EVENTID" ]; then
 	
 fi
 
+if [ "$MODE" != "historic" ] && [ "$MODE" != "realtime" ]; then
+	echo "Playback mode has to be either 'historic' or 'realtime'."
+	usage
+	exit 1
+fi
+
 if [ ${ACTION} == "prep" ]; then
 	PREPARATION="true"
 elif [ ${ACTION} == "pb" ]; then
@@ -148,6 +160,7 @@ do
 		--end) END="$2";shift;;
 		--configdir) CONFIGDIR="$2";shift;;
 		--fin) FILEIN="$2"; shift;;
+		--mode) MODE="$2"; shift;;
 		-h) usage; exit 0;;
 		-*) usage			
 			exit 1;;
@@ -182,8 +195,7 @@ if [ $PLAYBACK != "false" ]; then
 			EVTNAME=${TMPID##*/}
 			MSFILE=`ls ${PBDIR}/*${EVTNAME}*.sorted-mseed`
 			EVNTFILE=`ls ${PBDIR}/*${EVTNAME}*.xml`
-			echo `pwd`
-			./playback.py ${PBDIR}/${PBDB} ${MSFILE} -c ${CONFIGDIR} -m historic -e ${EVNTFILE} 
+			./playback.py ${PBDIR}/${PBDB} ${MSFILE} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
 		done
 	fi 
 fi
