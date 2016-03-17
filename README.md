@@ -4,7 +4,7 @@ This collection of scripts can be used to run playbacks in SeisComP3 (SC3).
 Since playback results are stored in an sqlite3 database, sqlite3 support has to be
 enabled in SC3.
 
-Some of the scripts depend on the seiscomp3 Python api so you have to make sure
+Some of the scripts depend on the SC3 Python api so you have to make sure
 it is on `PYTHONPATH`. The api is typically located under `$ROOTDIR/lib/python`.
 
 During the playback all enabled modules (with `seiscomp enable modulename`) will
