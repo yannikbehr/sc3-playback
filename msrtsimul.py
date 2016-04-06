@@ -5,35 +5,35 @@ from   getopt import getopt, GetoptError
 from seiscomp import mseedlite as mseed
 
 tstart = datetime.datetime.utcnow()
-ifile       = sys.stdin
-verbosity   = 0
-speed       = 1.
-jump        = 0
-test        = False
+ifile = sys.stdin
+verbosity = 0
+speed = 1.
+jump = 0
+test = False
 mode = 'realtime'
 starttime = None
 
-def read_mseed_with_delays(delaydict,reciterable):
+def read_mseed_with_delays(delaydict, reciterable):
     """
         Create an iterator which takes into account configurable realistic delays.
-    
+
         This function creates an iterator which returns one miniseed record at a time. Artificial delays can be introduced by using delaydict.
-        
+
         This function can be used to make simulations in real time more realistic when e.g. some stations have a much higher delay than others
-        due to narrow bandwidth communication channels etc. 
-        
+        due to narrow bandwidth communication channels etc.
+
         A delaydict has the following data structure:
         keys: XX.ABC (XX: network code, ABC: station code). The key "default" is a special value for the default delay.
         values: Delay to be introduced in seconds
-        
+
         This function will rearrange the iterable object which has been used as input for rt_simul() so that it can again be used by rt_simul
         but taking artificial delays into account.
-        
+
     """
     import time
     import heapq
     import itertools
-        
+
     heap = []
     min_delay = 0
     default_delay = 0
@@ -44,23 +44,20 @@ def read_mseed_with_delays(delaydict,reciterable):
     while rec:
         rec_time = calendar.timegm(rec.end_time.timetuple())
         delay_time = rec_time
-        stationname = "%s.%s" % (rec.net,rec.sta)
+        stationname = "%s.%s" % (rec.net, rec.sta)
         if stationname in delaydict:
             delay_time = rec_time + delaydict[stationname]
         else:
             delay_time = rec_time + default_delay
-        heapq.heappush(heap,(delay_time,rec))
+        heapq.heappush(heap, (delay_time, rec))
         toprectime = heap[0][0]
         if toprectime - min_delay < rec_time:
             topelement = heapq.heappop(heap)
             yield topelement
         rec = reciterator.next()
-    while h:
-        topelement = heapq.heappop(heap)
-        yield topelement
-   
 
-def rt_simul(f, speed=1., jump=0, delaydict = None):
+
+def rt_simul(f, speed=1., jump=0, delaydict=None):
     """
     Iterator to simulate "real-time" MSeed input
 
@@ -79,7 +76,7 @@ def rt_simul(f, speed=1., jump=0, delaydict = None):
     skipping = True
     record_iterable = mseed.Input(f)
     if delaydict:
-        record_iterable = read_mseed_with_delays(delaydict,record_iterable)
+        record_iterable = read_mseed_with_delays(delaydict, record_iterable)
     for rec in record_iterable:
         rec_time = None
         if delaydict:
@@ -98,8 +95,8 @@ def rt_simul(f, speed=1., jump=0, delaydict = None):
             skipping = False
 
         tmax = etime + speed * (time.time() - rtime)
-        last_sample_time = rec.begin_time +  datetime.timedelta(microseconds = 1000000.0 * (rec.nsamp / rec.fsamp))
-        last_sample_time = calendar.timegm(last_sample_time.timetuple())        
+        last_sample_time = rec.begin_time + datetime.timedelta(microseconds=1000000.0 * (rec.nsamp / rec.fsamp))
+        last_sample_time = calendar.timegm(last_sample_time.timetuple())
         if last_sample_time > tmax:
             time.sleep((last_sample_time - tmax + 0.001) / speed)
         yield rec
@@ -119,7 +116,7 @@ Options:
     -s, --speed         speed factor
     -j, --jump          number of minutes to skip
         --test          test mode
-    -m  --mode          choose between 'realtime' and 'historic'   
+    -m  --mode          choose between 'realtime' and 'historic'
     -v, --verbose       verbose mode
     -h, --help          display this help message
     -t, --starttime     define at which time the first record should be sent
@@ -131,7 +128,7 @@ def usage(exitcode=0):
 
 try:
     opts, args = getopt(sys.argv[1:], "cd:s:j:hvm:t:",
-                        [ "stdout","delays=", "speed=", "jump=", "test", "verbose", "help","mode=",
+                        [ "stdout", "delays=", "speed=", "jump=", "test", "verbose", "help", "mode=",
 "starttime=" ])
 except GetoptError:
     usage(exitcode=1)
@@ -141,13 +138,13 @@ delays = None
 
 for flag, arg in opts:
     if   flag in ("-c", "--stdout"):    out_channel = sys.stdout
-    elif flag in ("-d","--delays"):     delays = arg
+    elif flag in ("-d", "--delays"):     delays = arg
     elif flag in ("-s", "--speed"):     speed = float(arg)
     elif flag in ("-j", "--jump"):      jump = int(arg)
     elif flag in ("-h", "--help"):      usage(exitcode=0)
     elif flag in ("-m", "--mode"):      mode = arg
     elif flag in ("-v", "--verbose"):   verbosity += 1
-    elif flag in ("-t", "--starttime"): starttime = datetime.datetime.strptime(arg,"%Y-%m-%d %H:%M:%S.%f")
+    elif flag in ("-t", "--starttime"): starttime = datetime.datetime.strptime(arg, "%Y-%m-%d %H:%M:%S.%f")
     elif flag in ("--test"):            test = True
     else: usage(exitcode=1)
 
@@ -200,8 +197,8 @@ try:
         except: pass
 
     input = rt_simul(ifile, speed=speed, jump=jump, delaydict=delaydict)
-    
-    #input = rt_simul(ifile, speed=speed, jump=jump)
+
+    # input = rt_simul(ifile, speed=speed, jump=jump)
     time_diff = None
     if starttime is not None:
         while datetime.datetime.utcnow() < starttime:
@@ -210,14 +207,14 @@ try:
     for rec in input:
         if time_diff is None:
             time_diff = datetime.datetime.utcnow() - rec.begin_time - \
-                datetime.timedelta(microseconds = 1000000.0 * (rec.nsamp / rec.fsamp))
+                datetime.timedelta(microseconds=1000000.0 * (rec.nsamp / rec.fsamp))
         if mode == 'realtime':
             rec.begin_time += time_diff
 
         if verbosity:
-            sys.stderr.write("%s_%s %7.2f %s %7.2f\n" % (rec.net, rec.sta, (time.time() - stime), str(rec.begin_time), 
+            sys.stderr.write("%s_%s %7.2f %s %7.2f\n" % (rec.net, rec.sta, (time.time() - stime), str(rec.begin_time),
                                                          time.time() - calendar.timegm(rec.begin_time.timetuple())))
-            #sys.stderr.write("%s_%s %7.2f %s\n" % (rec.net, rec.sta, (time.time()-stime), str(rec.begin_time)))
+            # sys.stderr.write("%s_%s %7.2f %s\n" % (rec.net, rec.sta, (time.time()-stime), str(rec.begin_time)))
 
         if not test:
             rec.write(out_channel, 9)

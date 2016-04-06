@@ -13,6 +13,7 @@ CONFIGDIR="${HOME}/.seiscomp3"
 FILEIN=""
 ACTION=""
 MODE="historic"
+DELAYS=""
 
 function usage(){
 cat <<EOF
@@ -43,7 +44,15 @@ Options:
                     to the current system time at startup. For 'historic' the 
                     input records will keep their original timestamp. 
                     (Default: 'historic')
-
+    --delaytbl      Pass the path to an ascii file containing the average delays
+                    for every station in the network as well as a default delay
+                    that is applied to each station that is not explicitly 
+                    listed. The format of the file is as follows:
+                    
+                    default: 2.0
+                    CH.AIGLE: 5.2
+                    CH.VANNI: 3.5
+                    ...
 EOF
 }
 
@@ -74,6 +83,10 @@ if [ -z "$ACTION" ]; then
 	echo "Please define an action."
 	usage
 	exit 1
+fi
+
+if [ -n "$DELAYTBL" ]; then
+	DELAYS="-d ${DELAYTBL}"
 fi
 
 if [ -n "$FILEIN" ]; then
@@ -161,6 +174,7 @@ do
 		--configdir) CONFIGDIR="$2";shift;;
 		--fin) FILEIN="$2"; shift;;
 		--mode) MODE="$2"; shift;;
+		--delaytbl) DELAYTBL="$2";shift;;
 		-h) usage; exit 0;;
 		-*) usage			
 			exit 1;;
@@ -195,7 +209,7 @@ if [ $PLAYBACK != "false" ]; then
 			EVTNAME=${TMPID##*/}
 			MSFILE=`ls ${PBDIR}/*${EVTNAME}*.sorted-mseed`
 			EVNTFILE=`ls ${PBDIR}/*${EVTNAME}*.xml`
-			./playback.py ${PBDIR}/${PBDB} ${MSFILE} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
+			./playback.py ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
 		done
 	fi 
 fi
