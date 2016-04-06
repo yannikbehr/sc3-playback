@@ -7,6 +7,9 @@ enabled in SC3.
 Some of the scripts depend on the SC3 Python api so you have to make sure
 it is on `PYTHONPATH`. The api is typically located under `$ROOTDIR/lib/python`.
 
+The playback also depends on the library `libfaketime` which is used to simulate
+a different system time.
+
 During the playback all enabled modules (with `seiscomp enable modulename`) will
 be tested.
 
@@ -40,6 +43,16 @@ The main script is `playback.sh`:
                         to the current system time at startup. For 'historic' the
                         input records will keep their original timestamp.
                         (Default: 'historic')
+        --delaytbl      Pass the path to an ascii file containing the average delays
+                        for every station in the network as well as a default delay
+                        that is applied to each station that is not explicitly
+                        listed. The format of the file is as follows:
+
+                        default: 2.0
+                        CH.AIGLE: 5.2
+                        CH.VANNI: 3.5
+                        ...
+
 
 
 
@@ -109,3 +122,13 @@ you can set `agencyID=PB`. If you are merging events from other agencies with
 other tools than `scevent` also consider blacklisting these agencies
 (`processing.blacklist.agencies = agency1,agency2`); otherwise not all origins
 may be associated to the correct events.
+
+## Notes on testing different SC3 versions
+
+Let's assume you've installed a newer version of SC3 under `~/my_special_sc3`.
+If you want to run playbacks with this particular version you have to put a
+
+```
+~/my_special_sc3/bin/seiscomp exec
+```
+in front of every command.
