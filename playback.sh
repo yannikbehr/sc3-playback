@@ -26,13 +26,14 @@ Arguments:
                       all: do both in one go 
 Options:
     -h              Show this message.
-     --configdir     Configuration directory to use. (Default: ${HOME}/.seiscomp3).
+    --configdir     Configuration directory to use. (Default: ${HOME}/.seiscomp3).
+
   Event IDs:
     --evid          Give an eventID for playback.
     --fin           Give a file with one eventID per line for playback.
     
   Time window
-    --start         Give the starttime of a playback time window. Note that 
+    --begin         Give the starttime of a playback time window. Note that 
                     these options are mutually exclusive with the Event ID 
                     options.
     --end           Give the endtime of a playback time window. Note that these
@@ -58,7 +59,7 @@ EOF
 
 function processinput(){
 if [ -n "$EVENTID" ]; then
-	if [ -n "$START" ] || [ -n "$END" ]; then
+	if [ -n "$BEGIN" ] || [ -n "$END" ]; then
 		echo "You can only use event IDs OR time windows."
 		usage
 		exit 1
@@ -66,7 +67,7 @@ if [ -n "$EVENTID" ]; then
 fi
 	
 if [ -z "$EVENTID" ] && [ -z "$FILEIN" ]; then
-	if [ -z "$START" ] || [ -z "$END" ]; then
+	if [ -z "$BEGIN" ] || [ -z "$END" ]; then
 		echo "Either chose an event ID or a time window with start and end time."
 		usage
 		exit 1
@@ -114,6 +115,22 @@ if [ -n "$EVENTID" ]; then
 		mkdir -p $PBDIR
 	fi
 	
+fi
+
+if [ -n "$BEGIN" ] && [ -n "$END" ]; then
+	evids=( $( seiscomp exec scevtls  ${DBCONN}  --begin "$BEGIN"  --end "$END" ) )
+	if [ ${#evids[@]} -gt 0 ]; then
+		echo ${#evids[@]} "events in requested time span (from " ${evids[0]} "to" ${evids[-1]} ")"
+		
+		PBDIR=data/${START//[!0-9]/}-${END//[!0-9]/}  
+		# PBDIR=data/${evids[0]##*/}-${evids[-1]##*/} # generates problems for events from other databases ex: smi:webservices.rm.ingv.it/fdsnws/event/1/query?eventId=6346071
+		if [ ! -d $PBDIR ]; then
+			mkdir -p $PBDIR
+		fi	
+	else
+		echo "No events in requested time span."
+		exit 1
+	fi	
 fi
 
 if [ "$MODE" != "historic" ] && [ "$MODE" != "realtime" ]; then
@@ -169,7 +186,7 @@ while [ $# -gt 1 ]
 do
 	case "$1" in 
 		--evid) EVENTID="$2";shift;;
-		--start) START="$2";shift;;
+		--begin) BEGIN="$2";shift;;
 		--end) END="$2";shift;;
 		--configdir) CONFIGDIR="$2";shift;;
 		--fin) FILEIN="$2"; shift;;
@@ -189,8 +206,9 @@ processinput
 
 if [ $PREPARATION != "false" ]; then
 	echo "Preparing playback files ..."
-	if [ -z "$START" ]; then
+	if [ ${#evids[@]} -gt 0 ]; then  # if [ -z "$START" ]; then
 		cd $PBDIR
+		
 		setupdb
 		for TMPID in ${evids[@]}; do
 				../../make-mseed-playback.py  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I sdsarchive://${SDSARCHIVE}
@@ -204,7 +222,7 @@ fi
 
 if [ $PLAYBACK != "false" ]; then
 	echo "Running playback ..."
-	if [ -z "$START" ];then
+	if [ ${#evids[@]} -gt 0 ]; then  # if [ -z "$START" ];then
 		for TMPID in ${evids[@]}; do
 			EVTNAME=${TMPID##*/}
 			MSFILE=`ls ${PBDIR}/*${EVTNAME}*.sorted-mseed`
