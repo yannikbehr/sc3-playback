@@ -2,12 +2,13 @@
 
 
 source ./playback.cfg
+MAKEMSEEDPLAYBACK=( $( readlink -f ./make-mseed-playback.py ) )
 PREPARATION="false"
 PLAYBACK="false"
 INVENTORY="inventory.xml"
 CONFIG="config.xml"
 EVENTID=""
-START=""
+BEGIN=""
 END=""
 CONFIGDIR="${HOME}/.seiscomp3"
 FILEIN=""
@@ -122,14 +123,14 @@ if [ -n "$BEGIN" ] && [ -n "$END" ]; then
 	if [ ${#evids[@]} -gt 0 ]; then
 		echo ${#evids[@]} "events in requested time span (from " ${evids[0]} "to" ${evids[-1]} ")"
 		
-		PBDIR=data/${START//[!0-9]/}-${END//[!0-9]/}  
+		PBDIR=data/${BEGIN//[!0-9]/}-${END//[!0-9]/}  
 		# PBDIR=data/${evids[0]##*/}-${evids[-1]##*/} # generates problems for events from other databases ex: smi:webservices.rm.ingv.it/fdsnws/event/1/query?eventId=6346071
 		if [ ! -d $PBDIR ]; then
 			mkdir -p $PBDIR
 		fi	
 	else
 		echo "No events in requested time span."
-		exit 1
+		#exit 1
 	fi	
 fi
 
@@ -206,18 +207,18 @@ processinput
 
 if [ $PREPARATION != "false" ]; then
 	echo "Preparing playback files ..."
+	cd $PBDIR
+	setupdb
 	if [ ${#evids[@]} -gt 0 ]; then  # if [ -z "$START" ]; then
-		cd $PBDIR
-		
-		setupdb
 		for TMPID in ${evids[@]}; do
 				../../make-mseed-playback.py  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I sdsarchive://${SDSARCHIVE}
 		done
-		cd -
 	else
-		echo "blub"
-		#./make-mseed-playback.py  -u playback -H ${HOST} --plugins dbpostgresql -d postgres://${DBHOST} --debug --start 2015-03-05T20:00:00 --end 2015-03-05T20:15:00  -I sdsarchive://${SDSARCHIVE}
+		#echo "blub"		
+		# $MAKEMSEEDPLAYBACK is used as an example of how to procede to enable output in any directory given in input
+		$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I sdsarchive://${SDSARCHIVE}
 	fi
+	cd -
 fi
 
 if [ $PLAYBACK != "false" ]; then
@@ -229,6 +230,10 @@ if [ $PLAYBACK != "false" ]; then
 			EVNTFILE=`ls ${PBDIR}/*${EVTNAME}*.xml`
 			./playback.py ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
 		done
+	else
+	    MSFILE=`ls ${PBDIR}/*.sorted-mseed`
+	    ./playback.py ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE}
 	fi 
+	
 fi
 
