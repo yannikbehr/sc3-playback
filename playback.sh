@@ -2,7 +2,8 @@
 
 
 source ./playback.cfg
-MAKEMSEEDPLAYBACK=( $( readlink -f ./make-mseed-playback.py ) )
+MAKEMSEEDPLAYBACK="$( dirname $( readlink -f $0))/make-mseed-playback.py"
+RUNPLAYBACK="$( dirname $( readlink -f $0))/playback.py"
 PREPARATION="false"
 PLAYBACK="false"
 INVENTORY="inventory.xml"
@@ -31,6 +32,8 @@ Options:
 
   Event IDs:
     --evid          Give an eventID for playback.
+                       --evid none: forces playback of continous data without 
+                                    event's information.
     --fin           Give a file with one eventID per line for playback.
     
   Time window
@@ -59,7 +62,7 @@ EOF
 }
 
 function processinput(){
-if [ -n "$EVENTID" ]; then
+if [ -n "$EVENTID" ] && [ $EVENTID != "none" ] ; then
 	if [ -n "$BEGIN" ] || [ -n "$END" ]; then
 		echo "You can only use event IDs OR time windows."
 		usage
@@ -75,7 +78,7 @@ if [ -z "$EVENTID" ] && [ -z "$FILEIN" ]; then
 	fi
 fi
 
-if [ -n "$EVENTID" ] && [ -n "$FILEIN" ]; then
+if [ -n "$EVENTID" ] && [ -n "$FILEIN" ] && [ $EVENTID != "none" ] ; then
 	echo "Please define event IDs either in a file OR on the command line."
 	usage
 	exit 1
@@ -107,7 +110,7 @@ if [ -n "$FILEIN" ]; then
 	fi
 fi
 
-if [ -n "$EVENTID" ]; then
+if [ -n "$EVENTID" ] && [ $EVENTID != "none" ]; then
 	evids[0]=$EVENTID
 	# get the last part of the event ID and use it to name the output 
 	# directory
@@ -119,19 +122,19 @@ if [ -n "$EVENTID" ]; then
 fi
 
 if [ -n "$BEGIN" ] && [ -n "$END" ]; then
-	evids=( $( seiscomp exec scevtls  ${DBCONN}  --begin "$BEGIN"  --end "$END" ) )
-	if [ ${#evids[@]} -gt 0 ]; then
-		echo ${#evids[@]} "events in requested time span (from " ${evids[0]} "to" ${evids[-1]} ")"
-		
-		PBDIR=data/${BEGIN//[!0-9]/}-${END//[!0-9]/}  
-		# PBDIR=data/${evids[0]##*/}-${evids[-1]##*/} # generates problems for events from other databases ex: smi:webservices.rm.ingv.it/fdsnws/event/1/query?eventId=6346071
-		if [ ! -d $PBDIR ]; then
-			mkdir -p $PBDIR
-		fi	
-	else
-		echo "No events in requested time span."
-		#exit 1
+	
+	evids=()
+	if [ "$EVENTID" != "none" ]; then
+		evids=( $( seiscomp exec scevtls  ${DBCONN}  --begin "$BEGIN"  --end "$END" ) )
+	fi
+	echo ${#evids[@]} "events in requested time span (from "$BEGIN" to "$END")"	
+	
+	PBDIR=data/${BEGIN//[!0-9]/}-${END//[!0-9]/}_${#evids[@]}_events  
+	if [ ! -d $PBDIR ]; then
+		mkdir -p $PBDIR
 	fi	
+	echo "data files in " $PBDIR 
+	
 fi
 
 if [ "$MODE" != "historic" ] && [ "$MODE" != "realtime" ]; then
@@ -176,7 +179,7 @@ function setupdb(){
 	cp ${PBDB} ${PBDB%\.*}_no_event.sqlite 
 }
 
-if [ "$#" -gt 5 ] || [ $# -lt 3 ]; then
+if [ "$#" -gt 7 ] || [ $# -lt 3 ]; then
 	echo "Too few command line arguments."
     usage
     exit 0
@@ -205,17 +208,22 @@ ACTION=$1
 
 processinput
 
+if [ ! -f $MAKEMSEEDPLAYBACK ] || [ ! -f $RUNPLAYBACK ]; then
+	echo "You need the following dependencies:" 
+	echo $MAKEMSEEDPLAYBACK 
+	echo $RUNPLAYBACK
+	exit 1
+fi
+
 if [ $PREPARATION != "false" ]; then
 	echo "Preparing playback files ..."
 	cd $PBDIR
 	setupdb
-	if [ ${#evids[@]} -gt 0 ]; then  # if [ -z "$START" ]; then
+	if [ ${#evids[@]} -gt 0 ]; then  
 		for TMPID in ${evids[@]}; do
-				../../make-mseed-playback.py  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I sdsarchive://${SDSARCHIVE}
+			$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I sdsarchive://${SDSARCHIVE}
 		done
 	else
-		#echo "blub"		
-		# $MAKEMSEEDPLAYBACK is used as an example of how to procede to enable output in any directory given in input
 		$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I sdsarchive://${SDSARCHIVE}
 	fi
 	cd -
@@ -223,17 +231,19 @@ fi
 
 if [ $PLAYBACK != "false" ]; then
 	echo "Running playback ..."
-	if [ ${#evids[@]} -gt 0 ]; then  # if [ -z "$START" ];then
+	if [ ${#evids[@]} -gt 0 ]; then 
 		for TMPID in ${evids[@]}; do
 			EVTNAME=${TMPID##*/}
 			MSFILE=`ls ${PBDIR}/*${EVTNAME}*.sorted-mseed`
 			EVNTFILE=`ls ${PBDIR}/*${EVTNAME}*.xml`
-			./playback.py ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
+			$RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
 		done
 	else
-	    MSFILE=`ls ${PBDIR}/*.sorted-mseed`
-	    ./playback.py ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE}
-	fi 
+	    MSFILE=`ls ${PBDIR}/*sorted-mseed`
+	    $RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE}
+	fi
+	echo "Exanime results with:"
+	echo "scolv --offline --debug --plugins dbsqlite3 -d sqlite3://${PBDIR}/test_db.sqlite -I $MSFILE" 
 	
 fi
 
