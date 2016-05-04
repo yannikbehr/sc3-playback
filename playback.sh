@@ -32,8 +32,6 @@ Options:
 
   Event IDs:
     --evid          Give an eventID for playback.
-                       --evid none: forces playback of continous data without 
-                                    event's information.
     --fin           Give a file with one eventID per line for playback.
     
   Time window
@@ -110,7 +108,7 @@ if [ -n "$FILEIN" ]; then
 	fi
 fi
 
-if [ -n "$EVENTID" ] && [ $EVENTID != "none" ]; then
+if [ -n "$EVENTID" ] ; then
 	evids[0]=$EVENTID
 	# get the last part of the event ID and use it to name the output 
 	# directory
@@ -124,9 +122,7 @@ fi
 if [ -n "$BEGIN" ] && [ -n "$END" ]; then
 	
 	evids=()
-	if [ "$EVENTID" != "none" ]; then
-		evids=( $( seiscomp exec scevtls  ${DBCONN}  --begin "$BEGIN"  --end "$END" ) )
-	fi
+	evids=( $( seiscomp exec scevtls  ${DBCONN}  --begin "$BEGIN"  --end "$END" ) )
 	echo ${#evids[@]} "events in requested time span (from "$BEGIN" to "$END")"	
 	
 	PBDIR=data/${BEGIN//[!0-9]/}-${END//[!0-9]/}_${#evids[@]}_events  
@@ -166,15 +162,14 @@ function setupdb(){
 			scxmldump --debug -f -E ${TMPID} -P -A -M -F ${DBCONN} > ${EVENTNAME}.xml
 		done
 	else
-		if [ "$EVENTID" != "none" ] ; then
-			EVENTNAME=${#evids[@]}_events #${evids[0]##*/}-${evids[-1]##*/}
-			EVENTSIDSLIST=""
-			for TMPID in ${evids[@]}; do
-				EVENTIDS=$EVENTSIDSLIST,$TMPID
-			done
-			echo "Retrieving event information for ${EVENTNAME} ..."
-			scxmldump --debug -f -E ${EVENTSIDSLIST} -P -A -M -F ${DBCONN} > ${EVENTNAME}.xml
-		fi
+		EVENTNAME=${#evids[@]}_events 
+		EVENTSIDLIST=""
+		for TMPID in ${evids[@]}; do
+			EVENTSIDLIST=$EVENTSIDLIST,$TMPID
+		done
+		echo "Retrieving event information for ${EVENTNAME} ..."
+		echo scxmldump --debug -f -E "${EVENTSIDLIST}" -P -A -M -F ${DBCONN}
+		scxmldump --debug -f -E "${EVENTSIDLIST}" -P -A -M -F ${DBCONN} > ${EVENTNAME}.xml
 	fi
 	echo "Retrieving inventory ..."
 	scxmldump -f -I $DBCONN  > $INVENTORY
@@ -231,29 +226,37 @@ if [ $PREPARATION != "false" ]; then
 	echo "Preparing playback files ..."
 	cd $PBDIR
 	setupdb
-	#if [ -n "$FILEIN" ] || ; then 
-	if [ ${#evids[@]} -gt 0 ]; then  
+	# if no event requested, then one miniseed file for whole time span 
+	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
+		
+		$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I sdsarchive://${SDSARCHIVE}
+	
+	# otherwise process requested events individually 
+	else 
 		for TMPID in ${evids[@]}; do
 			$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I sdsarchive://${SDSARCHIVE}
 		done
-	else
-		$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I sdsarchive://${SDSARCHIVE}
 	fi
 	cd -
 fi
 
 if [ $PLAYBACK != "false" ]; then
 	echo "Running playback ..."
-	if [ ${#evids[@]} -gt 0 ]; then 
+	
+	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
+		
+		MSFILE=`ls ${PBDIR}/*sorted-mseed`
+	    	EVNTFILE=`ls ${PBDIR}/*_events.xml`
+		$RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE}
+	
+	else 
 		for TMPID in ${evids[@]}; do
 			EVTNAME=${TMPID##*/}
 			MSFILE=`ls ${PBDIR}/*${EVTNAME}*.sorted-mseed`
 			EVNTFILE=`ls ${PBDIR}/*${EVTNAME}*.xml`
 			$RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
 		done
-	else
-	    MSFILE=`ls ${PBDIR}/*sorted-mseed`
-	    $RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE}
+	
 	fi
 
 	echo "Exanime results with:"
