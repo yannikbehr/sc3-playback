@@ -81,7 +81,7 @@ fi
 if [ -n "$EVENTID" ] && [ -n "$FILEIN" ] && [ $EVENTID != "none" ] ; then
 	echo "Please define event IDs either in a file OR on the command line."
 	usage
-	exit 1
+	exit 1		
 fi
 
 if [ -z "$ACTION" ]; then
@@ -159,11 +159,23 @@ fi
 }
 
 function setupdb(){
-	for TMPID in ${evids[@]}; do
-		EVENTNAME=${TMPID##*/}
-		echo "Retrieving event information for ${TMPID} ..."
-		scxmldump --debug -f -E ${TMPID} -P -A -M -F ${DBCONN} > ${EVENTNAME}.xml
-	done
+	if [ -n "$FILEIN" ] ||  [ -n "$EVENTID" ] ; then
+		for TMPID in ${evids[@]}; do
+			EVENTNAME=${TMPID##*/}
+			echo "Retrieving event information for ${TMPID} ..."
+			scxmldump --debug -f -E ${TMPID} -P -A -M -F ${DBCONN} > ${EVENTNAME}.xml
+		done
+	else
+		if [ "$EVENTID" != "none" ] ; then
+			EVENTNAME=${#evids[@]}_events #${evids[0]##*/}-${evids[-1]##*/}
+			EVENTSIDSLIST=""
+			for TMPID in ${evids[@]}; do
+				EVENTIDS=$EVENTSIDSLIST,$TMPID
+			done
+			echo "Retrieving event information for ${EVENTNAME} ..."
+			scxmldump --debug -f -E ${EVENTSIDSLIST} -P -A -M -F ${DBCONN} > ${EVENTNAME}.xml
+		fi
+	fi
 	echo "Retrieving inventory ..."
 	scxmldump -f -I $DBCONN  > $INVENTORY
 	echo "Retrieving configuration ..."
@@ -219,6 +231,7 @@ if [ $PREPARATION != "false" ]; then
 	echo "Preparing playback files ..."
 	cd $PBDIR
 	setupdb
+	#if [ -n "$FILEIN" ] || ; then 
 	if [ ${#evids[@]} -gt 0 ]; then  
 		for TMPID in ${evids[@]}; do
 			$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I sdsarchive://${SDSARCHIVE}
@@ -242,6 +255,7 @@ if [ $PLAYBACK != "false" ]; then
 	    MSFILE=`ls ${PBDIR}/*sorted-mseed`
 	    $RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE}
 	fi
+
 	echo "Exanime results with:"
 	echo "scolv --offline --debug --plugins dbsqlite3 -d sqlite3://${PBDIR}/test_db.sqlite -I $MSFILE" 
 	
