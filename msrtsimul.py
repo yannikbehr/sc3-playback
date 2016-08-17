@@ -217,7 +217,7 @@ try:
             # sys.stderr.write("%s_%s %7.2f %s\n" % (rec.net, rec.sta, (time.time()-stime), str(rec.begin_time)))
 
         if not test:
-            rec.write(out_channel, 9)
+            rec.write(out_channel,9)
             out_channel.flush()
 
 except KeyboardInterrupt:
