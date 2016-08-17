@@ -15,11 +15,13 @@ import pipes
 import shutil
 import signal
 import subprocess as sp
+import subprocess
+import shutil
 import sys
 import tempfile
 import time
 import traceback
-
+import uuid
 from seiscomp3 import Config, System
 import seiscomp3.Kernel
 import seiscomp3.IO
@@ -247,7 +249,12 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
     if not os.path.isdir(config_dir):
         raise PBError('%s does not exist.' % config_dir)
     system(['seiscomp', 'stop'])
-
+#    tmpfile = "/tmp/%s" % uuid.uuid4()
+#    print("/usr/local/bin/qmerge -b 512 -o %s %s" %(tmpfile,wf))
+#    subprocess.call(["/usr/local/bin/qmerge", "-b", "512", "-o",tmpfile,wf])
+#    shutil.copyfile(tmpfile,wf)
+#    os.remove(tmpfile)
+                          
     scmaster_cfg = setup_config(config_dir, database)
     setup_seedlink(fifo)
 
