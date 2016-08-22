@@ -30,7 +30,9 @@ def filterStreams(streams):
     return filtered
 
 
-def getCurrentStreams(dbr, now=seiscomp3.Core.Time.GMT()):
+def getCurrentStreams(dbr, now=None):
+    if now is None:
+        now = seiscomp3.Core.Time.GMT()
     inv = seiscomp3.DataModel.Inventory()
     dbr.loadNetworks(inv)
 
