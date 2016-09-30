@@ -290,7 +290,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
             command += ['-t', str(t0)]
             t0 -= datetime.timedelta(seconds=startupdelay)
             print "Start time %s" % t0
-            os.environ['LD_PRELOAD'] = '/usr/lib/faketime/libfaketime.so.1'
+            os.environ['LD_PRELOAD'] = '/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1'#/usr/lib/faketime/libfaketime.so.1'
             ts = time.time()
             # Set system time in seconds relative to UTC now
             os.environ['FAKETIME'] = "%f" % (time.mktime(t0.timetuple()) - ts)

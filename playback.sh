@@ -179,7 +179,8 @@ function setupdb(){
 	if [ -f ${PBDB} ]; then
 		rm ${PBDB}
 	fi
-	sqlite3 -batch -init $SQLITEINIT $PBDB
+	#sqlite3 -batch -init $SQLITEINIT $PBDB
+    cp $( dirname $( readlink -f $0))/data/test_db.sqlite.sc3seattle-pb $PBDB
 	echo "Populating sqlite database ..."
 	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $INVENTORY
 	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $CONFIG
