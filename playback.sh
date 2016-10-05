@@ -1,8 +1,25 @@
 #!/bin/bash
 
 
-source ./playback.cfg
-PLAYBACKROOT="$( dirname $( readlink -f $0))/"
+PLAYBACKROOT="$( dirname "$( readlink -f "$0")")/"
+
+function loadsconf(){
+    if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
+        echo Loading $CONFIGFILE ...
+        source "$CONFIGFILE"
+    fi
+}
+
+# loading order 
+#CONFIGFILE="${PLAYBACKROOT}playback.cfg" # deepest but does not prevails over the over
+#loadsconf
+CONFIGFILE="${SEISCOMP_ROOT}/etc/playback.cfg" # deepest but does not prevails over the over 
+loadsconf
+CONFIGFILE="${HOME}/.seiscomp3/playback.cfg" # prevails over the previous
+loadsconf
+CONFIGFILE="./playback.cfg" #  prevails over all the overs
+loadsconf
+
 MAKEMSEEDPLAYBACK="${PLAYBACKROOT}make-mseed-playback.py"
 RUNPLAYBACK="${PLAYBACKROOT}playback.py"
 PREPARATION="false"
@@ -188,10 +205,9 @@ function setupdb(){
 	if [ -f ${PBDB} ]; then
 		rm ${PBDB}
 	fi
-	#sqlite3 -batch -init $SQLITEINIT $PBDB
+	sqlite3 -batch -init $SQLITEINIT $PBDB
 	cp ${PLAYBACKROOT}data/test_db.sqlite.sc3seattle-pb $PBDB
-	echo "Populating sqlite database ..."
-	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $INVENTORY
+    scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $INVENTORY
 	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $CONFIG
 	cp ${PBDB} ${PBDB%\.*}_no_event.sqlite 
 }
