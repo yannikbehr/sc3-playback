@@ -105,7 +105,13 @@ You can comment single event IDs with a '#'-character.
 
 ### Example 3: Run playback of a timespan
 
-Not fully implemented yet.
+
+To do playbacks of all available data in a time span run:
+
+    $ ./playback.sh --begin "yyyy-mm-dd HH:MM:SS" --end "yyyy-mm-dd HH:MM:SS" all
+
+This will create all the necessary files for the playback in `data/yyyymmddHHMMSS-yyyymmddHHMMSS_N_events`.
+
 
 ## Notes on the SC3 configuration
 
