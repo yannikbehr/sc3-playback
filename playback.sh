@@ -205,9 +205,9 @@ function setupdb(){
 	if [ -f ${PBDB} ]; then
 		rm ${PBDB}
 	fi
-	sqlite3 -batch -init $SQLITEINIT $PBDB
-	cp ${PLAYBACKROOT}data/test_db.sqlite.sc3seattle-pb $PBDB
-    scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $INVENTORY
+	sqlite3 -batch -init "$SQLITEINIT" "$PBDB" .exit
+   	echo "Populating sqlite database ..."
+	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $INVENTORY
 	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $CONFIG
 	cp ${PBDB} ${PBDB%\.*}_no_event.sqlite 
 }
@@ -257,16 +257,16 @@ if [ $PREPARATION != "false" ]; then
 	# if no event requested, then one miniseed file for whole time span 
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
 		
-		$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I sdsarchive://${SDSARCHIVE}
+		"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "sdsarchive://${SDSARCHIVE}"
 		echo "Examine data with:"
 		echo "scrttv --debug --offline --record-file ${PBDIR}/*sorted-mseed"
 	
 	# otherwise process requested events individually 
 	else 
 		for TMPID in ${evids[@]}; do
-			$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I sdsarchive://${SDSARCHIVE}
+			"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "sdsarchive://${SDSARCHIVE}"
 			echo "Examine data with:"
-			echo "scrttv --debug --offline --record-file ${PBDIR}/${TMPID}*.sorted-mseed"
+			echo "scrttv --debug --offline --record-file \"${PBDIR}/${TMPID}\"*.sorted-mseed"
 		done
 	fi
 	cd -
@@ -277,22 +277,22 @@ if [ $PLAYBACK != "false" ]; then
 	
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
 		
-		MSFILE=`ls ${PBDIR}/*sorted-mseed`
-	    	EVNTFILE=`ls ${PBDIR}/*_events.xml`
-		$RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE}
+		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
+	    	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
+		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	
 	else 
 		for TMPID in ${evids[@]}; do
 			EVTNAME=${TMPID##*/}
-			MSFILE=`ls ${PBDIR}/*${EVTNAME}*.sorted-mseed`
-			EVNTFILE=`ls ${PBDIR}/*${EVTNAME}*.xml`
-			$RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
+			MSFILE=`ls "${PBDIR}/"*${EVTNAME}*.sorted-mseed`
+			EVNTFILE=`ls "${PBDIR}/"*${EVTNAME}*.xml`
+			"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}" 
 		done
 	
 	fi
 
 	echo "Examine results with:"
-	echo "scolv --offline --debug --plugins dbsqlite3 -d sqlite3://${PBDIR}/test_db.sqlite -I $MSFILE" 
+	echo "scolv --offline --debug --plugins dbsqlite3 -d \"sqlite3://${PBDIR}/test_db.sqlite\" -I \"$MSFILE\"" 
 	
 fi
 
