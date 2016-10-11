@@ -11,8 +11,8 @@ DBCONN=""
 # Path to the SQL init file for sqlite3 (e.g. "${SEISCOMP_ROOT}/share/db/sqlite3.sql"
 SQLITEINIT=""
 
-# Path to SDS archive
-SDSARCHIVE=""
+# The recordstream source URL, format: [service://]location[#type]
+RECORDURL=""
 
 # Name of sqlite3 playback database
 PBDB=""
