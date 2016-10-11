@@ -241,7 +241,7 @@ ACTION=$1
 
 processinput
 
-if [ ! -f $MAKEMSEEDPLAYBACK ] || [ ! -f $RUNPLAYBACK ]; then
+if [ ! -f "$MAKEMSEEDPLAYBACK" ] || [ ! -f "$RUNPLAYBACK" ]; then
 	echo "You need the following dependencies:" 
 	echo $MAKEMSEEDPLAYBACK 
 	echo $RUNPLAYBACK
@@ -250,21 +250,22 @@ fi
 
 if [ $PREPARATION != "false" ]; then
 	echo "Preparing playback files ..."
-	cd $PBDIR
+	cd "$PBDIR"
 	if [ "$MODE" != "offline" ]; then
 		setupdb
 	fi
 	# if no event requested, then one miniseed file for whole time span 
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
 		
-		"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "sdsarchive://${SDSARCHIVE}"
+		"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
 		echo "Examine data with:"
 		echo "scrttv --debug --offline --record-file ${PBDIR}/*sorted-mseed"
 	
 	# otherwise process requested events individually 
 	else 
 		for TMPID in ${evids[@]}; do
-			"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "sdsarchive://${SDSARCHIVE}"
+			"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "${RECORDURL}" 
+			#"sdsarchive://${SDSARCHIVE}"
 			echo "Examine data with:"
 			echo "scrttv --debug --offline --record-file \"${PBDIR}/${TMPID}\"*.sorted-mseed"
 		done
