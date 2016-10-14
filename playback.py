@@ -7,6 +7,7 @@ all modules that were enabled using 'seiscomp enable modulename' are included
 in the playback.
 """
 
+import calendar
 import datetime
 import glob
 import imp
@@ -26,7 +27,15 @@ from seiscomp3 import Config, System
 import seiscomp3.Kernel
 import seiscomp3.IO
 
-class PBError(Exception): pass
+
+class PBError(Exception):
+    pass
+
+
+def error(msg):
+    sys.stderr.write("error: %s\n" % msg)
+    sys.stderr.flush()
+
 
 def start_module(mod, params=''):
     """
@@ -42,9 +51,11 @@ def start_module(mod, params=''):
 
 ##### The following functions were copied from the seiscomp startup script ####
 def touch(filename):
-    try: open(filename, 'w').close()
+    try:
+        open(filename, 'w').close()
     except Exception, exc:
         PBError(str(exc))
+
 
 def system(args):
     proc = sp.Popen(args, shell=False, env=os.environ)
@@ -55,10 +66,13 @@ def system(args):
             continue
         except Exception, e:
             # Terminate was introduced in Python 2.6
-            try: proc.terminate()
-            except: pass
+            try:
+                proc.terminate()
+            except:
+                pass
             sys.stderr.write("Exception: %s\n" % str(e))
             continue
+
 
 def load_module(path):
     """
@@ -91,10 +105,14 @@ def load_module(path):
 
 
 def module_compare(a, b):
-    if a.order < b.order: return -1
-    if a.order > b.order: return 1
-    if a.name < b.name: return -1
-    if a.name > b.name: return 1
+    if a.order < b.order:
+        return -1
+    if a.order > b.order:
+        return 1
+    if a.name < b.name:
+        return -1
+    if a.name > b.name:
+        return 1
     return 0
 
 
@@ -103,12 +121,14 @@ def load_init_modules(path):
 
     files = glob.glob(os.path.join(path, "*.py"))
     for f in files:
-        try: pmod = load_module(f)
+        try:
+            pmod = load_module(f)
         except Exception, exc:
             error(("%s: " % f) + str(exc))
             continue
 
-        try: mod = pmod(env)
+        try:
+            mod = pmod(env)
         except Exception, exc:
             error(("%s: " % f) + str(exc))
             continue
@@ -118,13 +138,15 @@ def load_init_modules(path):
     return mods
 ###############################################################################
 
+
 def setup_seedlink(fifofn):
     """
     Make sure the fifo file exists and that the seedlink buffer is empty
     otherwise seedlink will reject waveforms identical to previous playbacks,
     e.g. during historic playbacks
     """
-    bufferdir = os.path.join(ei.installDir(), 'var', 'lib', 'seedlink', 'buffer')
+    bufferdir = os.path.join(
+        ei.installDir(), 'var', 'lib', 'seedlink', 'buffer')
     if os.path.isdir(bufferdir):
         names = os.listdir(bufferdir)
         for _e in names:
@@ -153,7 +175,7 @@ def setup_config(configdir, db):
         d = datetime.datetime.now().strftime("%Y%j%H%M%S")
         newdir = '_'.join((default, d, 'backup'))
         if os.path.isdir(newdir):
-            raise PBError('Cannot backup %s: %s already exists.' % \
+            raise PBError('Cannot backup %s: %s already exists.' %
                           (default, newdir))
         os.rename(default, newdir)
         os.symlink(configdir, default)
@@ -254,7 +276,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
 #    subprocess.call(["/usr/local/bin/qmerge", "-b", "512", "-o",tmpfile,wf])
 #    shutil.copyfile(tmpfile,wf)
 #    os.remove(tmpfile)
-                          
+
     scmaster_cfg = setup_config(config_dir, database)
     setup_seedlink(fifo)
 
@@ -290,10 +312,13 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
             command += ['-t', str(t0)]
             t0 -= datetime.timedelta(seconds=startupdelay)
             print "Start time %s" % t0
-            os.environ['LD_PRELOAD'] = '/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1'#/usr/lib/faketime/libfaketime.so.1'
+            # /usr/lib/faketime/libfaketime.so.1'
+            os.environ[
+                'LD_PRELOAD'] = '/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1'
             ts = time.time()
             # Set system time in seconds relative to UTC now
-            os.environ['FAKETIME'] = "%f" % (time.mktime(t0.timetuple()) - ts)
+            os.environ['FAKETIME'] = "%f" % (
+                calendar.timegm(t0.utctimetuple()) - ts)
         else:
             ts = time.time()
             startupdelay = 0
@@ -333,7 +358,7 @@ if __name__ == '__main__':
     results.', default=None)
     parser.add_argument('-c', '--config-dir', help='Directory containing \
     configuration files.',
-    default=ei.configDir())
+                        default=ei.configDir())
     parser.add_argument('-f', '--fifo', help='Absolute path to seedlink fifo \
     file', default=os.path.join(ei.installDir(), 'var', 'run', 'seedlink', 'mseedfifo'))
     parser.add_argument('-d', '--delays', help="""Absolute path to a file
@@ -350,7 +375,7 @@ if __name__ == '__main__':
     'historic'. For 'realtime' the records in the input file will get a new
     timestamp relative to the current system time at startup. For 'historic'
     the input records will keep their original timestamp.""",
-    default='historic')
+                        default='historic')
 
     args = parser.parse_args()
     try:
