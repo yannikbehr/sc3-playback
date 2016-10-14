@@ -60,7 +60,7 @@ Options:
                     options are mutually exclusive with the Event ID options.
                     
   Playback
-    --mode          Choose between 'realtime', 'historic' and offline. For 'realtime' 
+    --mode          Choose between 'realtime', 'historic' and 'offline'. For 'realtime' 
 		    the records in the input file will get a new timestamp relative 
                     to the current system time at startup. For 'historic' the 
                     input records will keep their original timestamp. For 'offline'
@@ -254,10 +254,11 @@ if [ $PREPARATION != "false" ]; then
 	if [ "$MODE" != "offline" ]; then
 		setupdb
 	fi
+	
+	${SEISCOMP_ROOT}/bin/seiscomp check spread
 	# if no event requested, then one miniseed file for whole time span 
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
-		
-		"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
+        "$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
 		echo "Examine data with:"
 		echo "scrttv --debug --offline --record-file ${PBDIR}/*sorted-mseed"
 	
@@ -279,8 +280,8 @@ if [ $PLAYBACK != "false" ]; then
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
 		
 		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
-	    	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
-		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
+        EVNTFILE=`ls "${PBDIR}"/*_events.xml`
+        "$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	
 	else 
 		for TMPID in ${evids[@]}; do
