@@ -1,9 +1,27 @@
 #!/bin/bash
 
 
-source ./playback.cfg
-MAKEMSEEDPLAYBACK="$( dirname $( readlink -f $0))/make-mseed-playback.py"
-RUNPLAYBACK="$( dirname $( readlink -f $0))/playback.py"
+PLAYBACKROOT="$( dirname "$( readlink -f "$0")")/"
+
+function loadsconf(){
+    if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
+        echo Loading $CONFIGFILE ...
+        source "$CONFIGFILE"
+    fi
+}
+
+# loading order 
+#CONFIGFILE="${PLAYBACKROOT}playback.cfg" # deepest but does not prevails over the over
+#loadsconf
+CONFIGFILE="${SEISCOMP_ROOT}/etc/playback.cfg" # deepest but does not prevails over the over 
+loadsconf
+CONFIGFILE="${HOME}/.seiscomp3/playback.cfg" # prevails over the previous
+loadsconf
+CONFIGFILE="./playback.cfg" #  prevails over all the overs
+loadsconf
+
+MAKEMSEEDPLAYBACK="${PLAYBACKROOT}make-mseed-playback.py"
+RUNPLAYBACK="${PLAYBACKROOT}playback.py"
 PREPARATION="false"
 PLAYBACK="false"
 INVENTORY="inventory.xml"
@@ -42,10 +60,12 @@ Options:
                     options are mutually exclusive with the Event ID options.
                     
   Playback
-    --mode          Choose between 'realtime' and 'historic'. For 'realtime' the
-                    records in the input file will get a new timestamp relative 
+    --mode          Choose between 'realtime', 'historic' and offline. For 'realtime' 
+		    the records in the input file will get a new timestamp relative 
                     to the current system time at startup. For 'historic' the 
-                    input records will keep their original timestamp. 
+                    input records will keep their original timestamp. For 'offline'
+                    each enabled module is ran with their builtin parametric playback
+		    as fast as possible, not respecting the timestamp of records.  
                     (Default: 'historic')
     --delaytbl      Pass the path to an ascii file containing the average delays
                     for every station in the network as well as a default delay
@@ -133,8 +153,14 @@ if [ -n "$BEGIN" ] && [ -n "$END" ]; then
 	
 fi
 
-if [ "$MODE" != "historic" ] && [ "$MODE" != "realtime" ]; then
-	echo "Playback mode has to be either 'historic' or 'realtime'."
+if [ "$MODE" != "historic" ] && [ "$MODE" != "realtime" ] && [ "$MODE" != "offline" ]; then
+	echo "Playback mode has to be either 'historic' or 'realtime' or 'offline."
+	usage
+	exit 1
+fi
+
+if [ "$MODE" == "offline" ] && [ "$1" == "pb"] ; then
+	echo Offline playback not yet implemented
 	usage
 	exit 1
 fi
@@ -179,8 +205,8 @@ function setupdb(){
 	if [ -f ${PBDB} ]; then
 		rm ${PBDB}
 	fi
-	sqlite3 -batch -init $SQLITEINIT $PBDB
-	echo "Populating sqlite database ..."
+	sqlite3 -batch -init "$SQLITEINIT" "$PBDB" .exit
+   	echo "Populating sqlite database ..."
 	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $INVENTORY
 	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $CONFIG
 	cp ${PBDB} ${PBDB%\.*}_no_event.sqlite 
@@ -215,7 +241,7 @@ ACTION=$1
 
 processinput
 
-if [ ! -f $MAKEMSEEDPLAYBACK ] || [ ! -f $RUNPLAYBACK ]; then
+if [ ! -f "$MAKEMSEEDPLAYBACK" ] || [ ! -f "$RUNPLAYBACK" ]; then
 	echo "You need the following dependencies:" 
 	echo $MAKEMSEEDPLAYBACK 
 	echo $RUNPLAYBACK
@@ -224,17 +250,24 @@ fi
 
 if [ $PREPARATION != "false" ]; then
 	echo "Preparing playback files ..."
-	cd $PBDIR
-	setupdb
+	cd "$PBDIR"
+	if [ "$MODE" != "offline" ]; then
+		setupdb
+	fi
 	# if no event requested, then one miniseed file for whole time span 
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
 		
-		$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I sdsarchive://${SDSARCHIVE}
+		"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
+		echo "Examine data with:"
+		echo "scrttv --debug --offline --record-file ${PBDIR}/*sorted-mseed"
 	
 	# otherwise process requested events individually 
 	else 
 		for TMPID in ${evids[@]}; do
-			$MAKEMSEEDPLAYBACK  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I sdsarchive://${SDSARCHIVE}
+			"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "${RECORDURL}" 
+			#"sdsarchive://${SDSARCHIVE}"
+			echo "Examine data with:"
+			echo "scrttv --debug --offline --record-file \"${PBDIR}/${TMPID}\"*.sorted-mseed"
 		done
 	fi
 	cd -
@@ -245,22 +278,22 @@ if [ $PLAYBACK != "false" ]; then
 	
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
 		
-		MSFILE=`ls ${PBDIR}/*sorted-mseed`
-	    	EVNTFILE=`ls ${PBDIR}/*_events.xml`
-		$RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE}
+		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
+	    	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
+		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	
 	else 
 		for TMPID in ${evids[@]}; do
 			EVTNAME=${TMPID##*/}
-			MSFILE=`ls ${PBDIR}/*${EVTNAME}*.sorted-mseed`
-			EVNTFILE=`ls ${PBDIR}/*${EVTNAME}*.xml`
-			$RUNPLAYBACK  ${PBDIR}/${PBDB} ${MSFILE} ${DELAYS} -c ${CONFIGDIR} -m ${MODE} -e ${EVNTFILE} 
+			MSFILE=`ls "${PBDIR}/"*${EVTNAME}*.sorted-mseed`
+			EVNTFILE=`ls "${PBDIR}/"*${EVTNAME}*.xml`
+			"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}" 
 		done
 	
 	fi
 
-	echo "Exanime results with:"
-	echo "scolv --offline --debug --plugins dbsqlite3 -d sqlite3://${PBDIR}/test_db.sqlite -I $MSFILE" 
+	echo "Examine results with:"
+	echo "scolv --offline --debug --plugins dbsqlite3 -d \"sqlite3://${PBDIR}/test_db.sqlite\" -I \"$MSFILE\"" 
 	
 fi
 
