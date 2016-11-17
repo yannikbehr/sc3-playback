@@ -122,7 +122,7 @@ if [ -n "$FILEIN" ]; then
 		fi
 	done < $FILEIN
 	TMP=`basename ${FILEIN}`
-	PBDIR=data/${TMP%\.*}
+	PBDIR=${PLAYBACKROOT}data/${TMP%\.*}
 	if [ ! -d "$PBDIR" ]; then
 		mkdir -p $PBDIR
 	fi
@@ -132,7 +132,7 @@ if [ -n "$EVENTID" ] ; then
 	evids[0]=$EVENTID
 	# get the last part of the event ID and use it to name the output 
 	# directory
-	PBDIR=data/${EVENTID##*/}
+	PBDIR=${PLAYBACKROOT}data/${EVENTID##*/}
 	if [ ! -d $PBDIR ]; then
 		mkdir -p $PBDIR
 	fi
@@ -145,7 +145,7 @@ if [ -n "$BEGIN" ] && [ -n "$END" ]; then
 	evids=( $( seiscomp exec scevtls  ${DBCONN}  --begin "$BEGIN"  --end "$END" ) )
 	echo ${#evids[@]} "events in requested time span (from "$BEGIN" to "$END")"	
 	
-	PBDIR=data/${BEGIN//[!0-9]/}-${END//[!0-9]/}_${#evids[@]}_events  
+	PBDIR=${PLAYBACKROOT}data/${BEGIN//[!0-9]/}-${END//[!0-9]/}_${#evids[@]}_events  
 	if [ ! -d $PBDIR ]; then
 		mkdir -p $PBDIR
 	fi	
@@ -258,7 +258,7 @@ if [ $PREPARATION != "false" ]; then
 	${SEISCOMP_ROOT}/bin/seiscomp check spread
 	# if no event requested, then one miniseed file for whole time span 
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
-        "$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
+        	"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
 		echo "Examine data with:"
 		echo "scrttv --debug --offline --record-file ${PBDIR}/*sorted-mseed"
 	
@@ -276,12 +276,13 @@ fi
 
 if [ $PLAYBACK != "false" ]; then
 	echo "Running playback ..."
+	echo cp ${PBDIR}/${PBDB%\.*}_no_event.sqlite ${PBDIR}/${PBDB}
+	cp ${PBDIR}/${PBDB%\.*}_no_event.sqlite ${PBDIR}/${PBDB}	
 	
-	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
-		
+	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then	
 		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
-        EVNTFILE=`ls "${PBDIR}"/*_events.xml`
-        "$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
+        	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
+        	"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	
 	else 
 		for TMPID in ${evids[@]}; do
