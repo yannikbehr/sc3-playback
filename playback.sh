@@ -1,25 +1,6 @@
 #!/bin/bash
 
-
 PLAYBACKROOT="$( dirname "$( readlink -f "$0")")/"
-
-function loadsconf(){
-    if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
-        echo Loading $CONFIGFILE ...
-        source "$CONFIGFILE"
-    fi
-}
-
-# loading order 
-#CONFIGFILE="${PLAYBACKROOT}playback.cfg" # deepest but does not prevails over the over
-#loadsconf
-CONFIGFILE="${SEISCOMP_ROOT}/etc/playback.cfg" # deepest but does not prevails over the over 
-loadsconf
-CONFIGFILE="${HOME}/.seiscomp3/playback.cfg" # prevails over the previous
-loadsconf
-CONFIGFILE="./playback.cfg" #  prevails over all the overs
-loadsconf
-
 MAKEMSEEDPLAYBACK="${PLAYBACKROOT}make-mseed-playback.py"
 RUNPLAYBACK="${PLAYBACKROOT}playback.py"
 PREPARATION="false"
@@ -35,6 +16,15 @@ ACTION=""
 MODE="historic"
 DELAYS=""
 
+function loadsconf(){
+    if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
+        echo Loading $CONFIGFILE ...
+        source "$CONFIGFILE"
+
+
+    fi
+}
+
 function usage(){
 cat <<EOF
 Usage: $0 [Options] action 
@@ -46,7 +36,13 @@ Arguments:
                       all: do both in one go 
 Options:
     -h              Show this message.
-    --configdir     Configuration directory to use. (Default: ${HOME}/.seiscomp3).
+    --config-file   Use alternative playback configuration file. If none
+                    given follows default loading order:
+                        1- $SEISCOMPROOT/etc/playback.cfg
+                        2- ~/.seiscomp3/playback.cfg (prevails previous)
+                        3- ./playback.cfg (prevails all previous)
+    --configdir     SeisComP3 configuration directory to use. (Default: 
+                    ${HOME}/.seiscomp3).
 
   Event IDs:
     --evid          Give an eventID for playback.
@@ -227,6 +223,7 @@ do
 		--end) END="$2";shift;;
 		--configdir) CONFIGDIR="$2";shift;;
 		--fin) FILEIN="$2"; shift;;
+		--config-file) CONFIGFILE="$2";shift;;
 		--mode) MODE="$2"; shift;;
 		--delaytbl) DELAYTBL="$2";shift;;
 		-h) usage; exit 0;;
@@ -238,6 +235,20 @@ do
 done
 
 ACTION=$1
+
+if [ -f "$CONFIGFILE" ] ; then
+	loadsconf
+else
+	# loading order 
+	#CONFIGFILE="${PLAYBACKROOT}playback.cfg" # deepest but does not prevails over the over
+	#loadsconf
+	CONFIGFILE="${SEISCOMP_ROOT}/etc/playback.cfg" # deepest but does not prevails over the over 
+	loadsconf
+	CONFIGFILE="${HOME}/.seiscomp3/playback.cfg" # prevails over the previous
+	loadsconf
+	CONFIGFILE="./playback.cfg" #  prevails over all the overs
+	loadsconf
+fi
 
 processinput
 
