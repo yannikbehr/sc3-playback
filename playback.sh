@@ -120,7 +120,7 @@ if [ -n "$FILEIN" ]; then
 	TMP=`basename ${FILEIN}`
 	PBDIR=${PLAYBACKROOT}data/${TMP%\.*}
 	if [ ! -d "$PBDIR" ]; then
-		mkdir -p $PBDIR
+		mkdir -p "$PBDIR"
 	fi
 fi
 
@@ -129,8 +129,8 @@ if [ -n "$EVENTID" ] ; then
 	# get the last part of the event ID and use it to name the output 
 	# directory
 	PBDIR=${PLAYBACKROOT}data/${EVENTID##*/}
-	if [ ! -d $PBDIR ]; then
-		mkdir -p $PBDIR
+	if [ ! -d "$PBDIR" ]; then
+		mkdir -p "$PBDIR"
 	fi
 	
 fi
@@ -142,8 +142,8 @@ if [ -n "$BEGIN" ] && [ -n "$END" ]; then
 	echo ${#evids[@]} "events in requested time span (from "$BEGIN" to "$END")"	
 	
 	PBDIR=${PLAYBACKROOT}data/${BEGIN//[!0-9]/}-${END//[!0-9]/}_${#evids[@]}_events  
-	if [ ! -d $PBDIR ]; then
-		mkdir -p $PBDIR
+	if [ ! -d "$PBDIR" ]; then
+		mkdir -p "$PBDIR"
 	fi	
 	echo "data files in " $PBDIR 
 	
@@ -198,14 +198,14 @@ function setupdb(){
 	echo "Retrieving configuration ..."
 	scxmldump -f -C $DBCONN  > $CONFIG
 	echo "Initializing sqlite database ..."
-	if [ -f ${PBDB} ]; then
-		rm ${PBDB}
+	if [ -f "${PBDB}" ]; then
+		rm "${PBDB}"
 	fi
 	sqlite3 -batch -init "$SQLITEINIT" "$PBDB" .exit
    	echo "Populating sqlite database ..."
-	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $INVENTORY
-	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $CONFIG
-	cp ${PBDB} ${PBDB%\.*}_no_event.sqlite 
+	scdb --plugins dbsqlite3 -d "sqlite3://${PBDB}" -i $INVENTORY
+	scdb --plugins dbsqlite3 -d "sqlite3://${PBDB}" -i $CONFIG
+	cp "${PBDB}" "${PBDB%\.*}_no_event.sqlite" 
 }
 
 if [ "$#" -gt 7 ] || [ $# -lt 3 ]; then
@@ -288,7 +288,7 @@ fi
 if [ $PLAYBACK != "false" ]; then
 	echo "Running playback ..."
 	echo cp ${PBDIR}/${PBDB%\.*}_no_event.sqlite ${PBDIR}/${PBDB}
-	cp ${PBDIR}/${PBDB%\.*}_no_event.sqlite ${PBDIR}/${PBDB}	
+	cp "${PBDIR}/${PBDB%\.*}_no_event.sqlite" "${PBDIR}/${PBDB}"	
 	
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then	
 		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
