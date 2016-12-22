@@ -1,8 +1,12 @@
 # SeisComP3 playbacks
 
 This collection of scripts can be used to run playbacks in SeisComP3 (SC3).
-Since playback results are stored in an sqlite3 database, sqlite3 support has to be
+
+- Since playback results are stored in an sqlite3 database, sqlite3 support has to be
 enabled in SC3.
+- bindings and meta data exist
+- seedlink has to be configured with the mseedfifo plugin
+- the mseedfifo has to exist and it has to be a named pipe
 
 Some of the scripts depend on the SC3 Python api so you have to make sure
 it is on `PYTHONPATH`. The api is typically located under `$ROOTDIR/lib/python`.
