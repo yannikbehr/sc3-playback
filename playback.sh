@@ -1,25 +1,6 @@
 #!/bin/bash
 
-
 PLAYBACKROOT="$( dirname "$( readlink -f "$0")")/"
-
-function loadsconf(){
-    if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
-        echo Loading $CONFIGFILE ...
-        source "$CONFIGFILE"
-    fi
-}
-
-# loading order 
-#CONFIGFILE="${PLAYBACKROOT}playback.cfg" # deepest but does not prevails over the over
-#loadsconf
-CONFIGFILE="${SEISCOMP_ROOT}/etc/playback.cfg" # deepest but does not prevails over the over 
-loadsconf
-CONFIGFILE="${HOME}/.seiscomp3/playback.cfg" # prevails over the previous
-loadsconf
-CONFIGFILE="./playback.cfg" #  prevails over all the overs
-loadsconf
-
 MAKEMSEEDPLAYBACK="${PLAYBACKROOT}make-mseed-playback.py"
 RUNPLAYBACK="${PLAYBACKROOT}playback.py"
 PREPARATION="false"
@@ -35,6 +16,15 @@ ACTION=""
 MODE="historic"
 DELAYS=""
 
+function loadsconf(){
+    if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
+        echo Loading $CONFIGFILE ...
+        source "$CONFIGFILE"
+
+
+    fi
+}
+
 function usage(){
 cat <<EOF
 Usage: $0 [Options] action 
@@ -46,7 +36,13 @@ Arguments:
                       all: do both in one go 
 Options:
     -h              Show this message.
-    --configdir     Configuration directory to use. (Default: ${HOME}/.seiscomp3).
+    --config-file   Use alternative playback configuration file. If none
+                    given follows default loading order:
+                        1- $SEISCOMPROOT/etc/playback.cfg
+                        2- ~/.seiscomp3/playback.cfg (prevails previous)
+                        3- ./playback.cfg (prevails all previous)
+    --configdir     SeisComP3 configuration directory to use. (Default: 
+                    ${HOME}/.seiscomp3).
 
   Event IDs:
     --evid          Give an eventID for playback.
@@ -60,7 +56,7 @@ Options:
                     options are mutually exclusive with the Event ID options.
                     
   Playback
-    --mode          Choose between 'realtime', 'historic' and offline. For 'realtime' 
+    --mode          Choose between 'realtime', 'historic' and 'offline'. For 'realtime' 
 		    the records in the input file will get a new timestamp relative 
                     to the current system time at startup. For 'historic' the 
                     input records will keep their original timestamp. For 'offline'
@@ -122,9 +118,9 @@ if [ -n "$FILEIN" ]; then
 		fi
 	done < $FILEIN
 	TMP=`basename ${FILEIN}`
-	PBDIR=data/${TMP%\.*}
+	PBDIR=${PLAYBACKROOT}data/${TMP%\.*}
 	if [ ! -d "$PBDIR" ]; then
-		mkdir -p $PBDIR
+		mkdir -p "$PBDIR"
 	fi
 fi
 
@@ -132,9 +128,9 @@ if [ -n "$EVENTID" ] ; then
 	evids[0]=$EVENTID
 	# get the last part of the event ID and use it to name the output 
 	# directory
-	PBDIR=data/${EVENTID##*/}
-	if [ ! -d $PBDIR ]; then
-		mkdir -p $PBDIR
+	PBDIR=${PLAYBACKROOT}data/${EVENTID##*/}
+	if [ ! -d "$PBDIR" ]; then
+		mkdir -p "$PBDIR"
 	fi
 	
 fi
@@ -145,9 +141,9 @@ if [ -n "$BEGIN" ] && [ -n "$END" ]; then
 	evids=( $( seiscomp exec scevtls  ${DBCONN}  --begin "$BEGIN"  --end "$END" ) )
 	echo ${#evids[@]} "events in requested time span (from "$BEGIN" to "$END")"	
 	
-	PBDIR=data/${BEGIN//[!0-9]/}-${END//[!0-9]/}_${#evids[@]}_events  
-	if [ ! -d $PBDIR ]; then
-		mkdir -p $PBDIR
+	PBDIR=${PLAYBACKROOT}data/${BEGIN//[!0-9]/}-${END//[!0-9]/}_${#evids[@]}_events  
+	if [ ! -d "$PBDIR" ]; then
+		mkdir -p "$PBDIR"
 	fi	
 	echo "data files in " $PBDIR 
 	
@@ -202,14 +198,14 @@ function setupdb(){
 	echo "Retrieving configuration ..."
 	scxmldump -f -C $DBCONN  > $CONFIG
 	echo "Initializing sqlite database ..."
-	if [ -f ${PBDB} ]; then
-		rm ${PBDB}
+	if [ -f "${PBDB}" ]; then
+		rm "${PBDB}"
 	fi
 	sqlite3 -batch -init "$SQLITEINIT" "$PBDB" .exit
    	echo "Populating sqlite database ..."
-	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $INVENTORY
-	scdb --plugins dbsqlite3 -d sqlite3://${PBDB} -i $CONFIG
-	cp ${PBDB} ${PBDB%\.*}_no_event.sqlite 
+	scdb --plugins dbsqlite3 -d "sqlite3://${PBDB}" -i $INVENTORY
+	scdb --plugins dbsqlite3 -d "sqlite3://${PBDB}" -i $CONFIG
+	cp "${PBDB}" "${PBDB%\.*}_no_event.sqlite" 
 }
 
 if [ "$#" -gt 7 ] || [ $# -lt 3 ]; then
@@ -227,6 +223,7 @@ do
 		--end) END="$2";shift;;
 		--configdir) CONFIGDIR="$2";shift;;
 		--fin) FILEIN="$2"; shift;;
+		--config-file) CONFIGFILE="$2";shift;;
 		--mode) MODE="$2"; shift;;
 		--delaytbl) DELAYTBL="$2";shift;;
 		-h) usage; exit 0;;
@@ -238,6 +235,20 @@ do
 done
 
 ACTION=$1
+
+if [ -f "$CONFIGFILE" ] ; then
+	loadsconf
+else
+	# loading order 
+	#CONFIGFILE="${PLAYBACKROOT}playback.cfg" # deepest but does not prevails over the over
+	#loadsconf
+	CONFIGFILE="${SEISCOMP_ROOT}/etc/playback.cfg" # deepest but does not prevails over the over 
+	loadsconf
+	CONFIGFILE="${HOME}/.seiscomp3/playback.cfg" # prevails over the previous
+	loadsconf
+	CONFIGFILE="./playback.cfg" #  prevails over all the overs
+	loadsconf
+fi
 
 processinput
 
@@ -254,10 +265,11 @@ if [ $PREPARATION != "false" ]; then
 	if [ "$MODE" != "offline" ]; then
 		setupdb
 	fi
+	
+	${SEISCOMP_ROOT}/bin/seiscomp check spread
 	# if no event requested, then one miniseed file for whole time span 
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
-		
-		"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
+        	"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
 		echo "Examine data with:"
 		echo "scrttv --debug --offline --record-file ${PBDIR}/*sorted-mseed"
 	
@@ -275,12 +287,13 @@ fi
 
 if [ $PLAYBACK != "false" ]; then
 	echo "Running playback ..."
+	echo cp ${PBDIR}/${PBDB%\.*}_no_event.sqlite ${PBDIR}/${PBDB}
+	cp "${PBDIR}/${PBDB%\.*}_no_event.sqlite" "${PBDIR}/${PBDB}"	
 	
-	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
-		
+	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then	
 		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
-	    	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
-		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
+        	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
+        	"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	
 	else 
 		for TMPID in ${evids[@]}; do
