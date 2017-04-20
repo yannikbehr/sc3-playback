@@ -1,0 +1,2 @@
+test.db filter=lfs diff=lfs merge=lfs -text
+test-event.sorted-mseed filter=lfs diff=lfs merge=lfs -text
