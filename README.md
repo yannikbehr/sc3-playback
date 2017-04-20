@@ -116,6 +116,64 @@ To do playbacks of all available data in a time span run:
 
 This will create all the necessary files for the playback in `data/yyyymmddHHMMSS-yyyymmddHHMMSS_N_events`.
 
+### Setting up and running the playback manually
+The `playback.sh` script is only a convenient wrapper around the two Python
+scripts `playback.py` and `make-mseed-playback.py`. Below are some notes in case
+you don't want to use the `playback.sh` script.
+
+### Setting up the sqlite3 database
+Assuming that you have a SeisComP3 compatible inventory in `inventory.xml` and
+the corresponding configuration in `configuration.xml` then you can setup an
+sqlite3 database as follows:
+
+```
+# Initialise a database file called test.db with the SeisComP3 schema
+sqlite3 -batch -init ${SEISCOMP_ROOT}/share/db/sqlite3.sql test.db .exit
+
+# Import the inventory
+scdb --plugins dbsqlite3 -d sqlite3://test.db -i inventory.xml
+
+# Import the configuration
+scdb --plugins dbsqlite3 -d sqlite3://test.db -i configuration.xml
+
+# Make a copy of the empty database; you can then easily erase the results of a
+# test run by copying the empty database file over the one containing the test
+# results   
+cp test.db test_empty.db
+```
+
+### Generating the waveform file
+Using the script `make-mseed-playback.py` you can use any record source
+supported by SeisComP3 to generate a multiplexed MiniSEED file suitable for
+playback. To see all supported record sources run:
+```
+./make-mseed-playback.py --record-driver-list
+```
+
+Assuming you have an SDS archive under `/data/sds` you could then, for example,
+request an hour long chunk of data including all stations that were active
+during that time span by running:
+
+```
+./make-mseed-playback.py  --plugins dbsqlite3 -d sqlite3://test.db --start "2017-04-01T14:59:59" --end "2017-04-01T15:59:59"
+```
+This will produce a file called `2017-04-01T14:59:59.sorted-mseed` in your
+current directory. Note that this also requires a database containing the
+inventory. Again, you can use any database type supported by SeisComP3. For a
+complete list of options run:
+```
+./make-mseed-playback.py -h
+```
+
+### Running the playback
+Once you've setup the playback files you can start the playback running:
+```
+./playback.py test.db 2017-04-01T14:59:59.sorted-mseed
+```
+For a complete list of options run:
+```
+./playback.py -h
+```
 
 ## Notes on the SC3 configuration
 
@@ -141,4 +199,5 @@ If you want to run playbacks with this particular version you have to put a
 ```
 ~/my_special_sc3/bin/seiscomp exec
 ```
-in front of every command.
+in front of every command. See also the [tests](tests/README.md) directory for instructions on
+how to use Docker for testing.
