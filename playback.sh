@@ -3,14 +3,15 @@
 PLAYBACKROOT="$( dirname "$( readlink -f "$0")")/"
 MAKEMSEEDPLAYBACK="${PLAYBACKROOT}make-mseed-playback.py"
 RUNPLAYBACK="${PLAYBACKROOT}playback.py"
+PLAYBACKDATA="${PLAYBACKROOT}data"
 PREPARATION="false"
 PLAYBACK="false"
 INVENTORY="inventory.xml"
 CONFIG="config.xml"
+CONFIGDIR="${HOME}/.seiscomp3"
 EVENTID=""
 BEGIN=""
 END=""
-CONFIGDIR="${HOME}/.seiscomp3"
 FILEIN=""
 ACTION=""
 MODE="historic"
@@ -19,9 +20,12 @@ DELAYS=""
 function loadsconf(){
     if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
         echo Loading $CONFIGFILE ...
-        source "$CONFIGFILE"
-
-
+        source "$CONFIGFILE" || (echo Can t load configuration in $CONFIGFILE && exit 1)
+	export SEISCOMP_ROOT=$SEISCOMP_ROOT
+	export LD_LIBRARY_PATH="$SEISCOMP_ROOT/lib:$LD_LIBRARY_PATH"
+	export PYTHONPATH="$SEISCOMP_ROOT/lib/python:$PYTHONPATH"
+	export MANPATH="$SEISCOMP_ROOT/man:$MANPATH"
+	export PATH="$SEISCOMP_ROOT/bin:$PATH"
     fi
 }
 
@@ -118,7 +122,7 @@ if [ -n "$FILEIN" ]; then
 		fi
 	done < $FILEIN
 	TMP=`basename ${FILEIN}`
-	PBDIR=${PLAYBACKROOT}data/${TMP%\.*}
+	PBDIR=${PLAYBACKDATA}/${TMP%\.*}
 	if [ ! -d "$PBDIR" ]; then
 		mkdir -p "$PBDIR"
 	fi
@@ -128,7 +132,7 @@ if [ -n "$EVENTID" ] ; then
 	evids[0]=$EVENTID
 	# get the last part of the event ID and use it to name the output 
 	# directory
-	PBDIR=${PLAYBACKROOT}data/${EVENTID##*/}
+	PBDIR=${PLAYBACKDATA}/${EVENTID##*/}
 	if [ ! -d "$PBDIR" ]; then
 		mkdir -p "$PBDIR"
 	fi
@@ -141,7 +145,8 @@ if [ -n "$BEGIN" ] && [ -n "$END" ]; then
 	evids=( $( seiscomp exec scevtls  ${DBCONN}  --begin "$BEGIN"  --end "$END" ) )
 	echo ${#evids[@]} "events in requested time span (from "$BEGIN" to "$END")"	
 	
-	PBDIR=${PLAYBACKROOT}data/${BEGIN//[!0-9]/}-${END//[!0-9]/}_${#evids[@]}_events  
+	PBDIR=${PLAYBACKDATA}/${BEGIN//[!0-9]/}-${END//[!0-9]/}
+    #_${#evids[@]}_events  
 	if [ ! -d "$PBDIR" ]; then
 		mkdir -p "$PBDIR"
 	fi	
@@ -251,7 +256,6 @@ else
 fi
 
 processinput
-
 if [ ! -f "$MAKEMSEEDPLAYBACK" ] || [ ! -f "$RUNPLAYBACK" ]; then
 	echo "You need the following dependencies:" 
 	echo $MAKEMSEEDPLAYBACK 
@@ -259,23 +263,27 @@ if [ ! -f "$MAKEMSEEDPLAYBACK" ] || [ ! -f "$RUNPLAYBACK" ]; then
 	exit 1
 fi
 
-if [ $PREPARATION != "false" ]; then
+if [ $PREPARATION != "false" ]
+then
 	echo "Preparing playback files ..."
 	cd "$PBDIR"
-	if [ "$MODE" != "offline" ]; then
+	if [ "$MODE" != "offline" ]
+	then
 		setupdb
 	fi
 	
 	${SEISCOMP_ROOT}/bin/seiscomp check spread
 	# if no event requested, then one miniseed file for whole time span 
-	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then
+	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] 
+	then
         	"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
 		echo "Examine data with:"
 		echo "scrttv --debug --offline --record-file ${PBDIR}/*sorted-mseed"
 	
 	# otherwise process requested events individually 
 	else 
-		for TMPID in ${evids[@]}; do
+		for TMPID in ${evids[@]}
+		do
 			"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "${RECORDURL}" 
 			#"sdsarchive://${SDSARCHIVE}"
 			echo "Examine data with:"
@@ -285,28 +293,57 @@ if [ $PREPARATION != "false" ]; then
 	cd -
 fi
 
-if [ $PLAYBACK != "false" ]; then
+if [ $PLAYBACK != "false" ]
+then
+	# prepare new db
 	echo "Running playback ..."
 	echo cp ${PBDIR}/${PBDB%\.*}_no_event.sqlite ${PBDIR}/${PBDB}
 	cp "${PBDIR}/${PBDB%\.*}_no_event.sqlite" "${PBDIR}/${PBDB}"	
 	
-	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] ; then	
+	# make space for new logs
+	mkdir -p ${PBDIR}/seiscomp3/log
+	ls ${PBDIR}/seiscomp3/* &>/dev/null && rm -r ${PBDIR}/seiscomp3/*
+	ls  ${CONFIGDIR}/.logbu &>/dev/null &&    mv   ${CONFIGDIR}/log/* ${CONFIGDIR}/.logbu/
+	ls  ${CONFIGDIR}/.logbu &>/dev/null ||    mv   ${CONFIGDIR}/log   ${CONFIGDIR}/.logbu
+	
+	# make sure seedlink will work, with fifo
+	${SEISCOMP_ROOT}/bin/seiscomp enable seedlink
+	sed -i 's;plugins\.mseedfifo\.fifo.*;plugins.mseedfifo.fifo = '${SEISCOMP_ROOT}'/var/run/seedlink/mseedfifo;' ${CONFIGDIR}/global.cfg
+	grep "plugins.mseedfifo.fifo" ${CONFIGDIR}/global.cfg
+
+	# run the playback
+	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ]
+	then	
+		# continuous data 
 		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
         	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
-        	"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
-	
+		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} #-e "${EVNTFILE}"
 	else 
-		for TMPID in ${evids[@]}; do
+		for TMPID in ${evids[@]}
+		do
+			# event data
 			EVTNAME=${TMPID##*/}
 			MSFILE=`ls "${PBDIR}/"*${EVTNAME}*.sorted-mseed`
 			EVNTFILE=`ls "${PBDIR}/"*${EVTNAME}*.xml`
-			"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}" 
+			"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} #-e "${EVNTFILE}"
 		done
 	
 	fi
-
-	echo "Examine results with:"
-	echo "scolv --offline --debug --plugins dbsqlite3 -d \"sqlite3://${PBDIR}/test_db.sqlite\" -I \"$MSFILE\"" 
 	
-fi
+	# export the results
+	mkdir -p ${PBDIR}/xmldump
+	rm ${PBDIR}/xmldump/*.xml
+	scevtls --plugins dbsqlite3 -d "sqlite3://${PBDIR}/${PBDB}" |while read E 
+	do 
+		scxmldump --plugins dbsqlite3 -d "sqlite3://${PBDIR}/${PBDB}" -fPAMF -E $E -o ${PBDIR}/xmldump/${E//\//_}.xml 
+	done
 
+	# save the logs
+	rsync -avzl ${CONFIGDIR}/  ${PBDIR}/seiscomp3/ 
+	ls  ${CONFIGDIR}/log/* &>/dev/null && rm -r ${CONFIGDIR}/log
+	ls ${CONFIGDIR}/.logbu &>/dev/null && mv ${CONFIGDIR}/.logbu  ${CONFIGDIR}/log
+	
+	# print next step
+	echo "Examine results with:"
+	echo "scolv --offline --debug --plugins dbsqlite3 -d \"sqlite3://${PBDIR}/${PBDB}\" -I \"$MSFILE\"" 	
+fi
