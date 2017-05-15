@@ -339,7 +339,7 @@ then
 	done
 
 	# save the logs
-	rsync -avzl ${CONFIGDIR}/  ${PBDIR}/seiscomp3/ 
+	rsync -avzl ${CONFIGDIR}/  ${PBDIR}/seiscomp3/ --exclude="*logbu*"
 	ls  ${CONFIGDIR}/log/* &>/dev/null && rm -r ${CONFIGDIR}/log
 	ls ${CONFIGDIR}/.logbu &>/dev/null && mv ${CONFIGDIR}/.logbu  ${CONFIGDIR}/log
 	
