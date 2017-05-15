@@ -1,3 +1,6 @@
+# SEISCOMP installtion to use (e.g. "/home/sysop/seiscomp3")
+SEISCOMP_ROOT=""
+
 # URL of the production machine
 HOST=""
 
@@ -16,3 +19,9 @@ RECORDURL=""
 
 # Name of sqlite3 playback database
 PBDB=""
+
+# The playback data directory (e.g. "/home/sysop/playbacks/${HOST}")
+PLAYBACKDATA=""
+
+# Path to station delays file (e.g."/home/sysop/station-delays.txt")
+DELAYTBL=""
