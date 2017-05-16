@@ -41,7 +41,7 @@ def event(baseurl='IRIS',
                 #sys.exit()
 	
 	if catalog:
-		cat = client.get_events(limit=maxnumber, orderby="magnitude",starttime=starttime, endtime=endtime, minmagnitude=minmag, maxmagnitude=maxmag, catalog="ISC")
+		cat = client.get_events(limit=maxnumber, orderby="magnitude",starttime=starttime, endtime=endtime, minmagnitude=minmag, maxmagnitude=maxmag, catalog=catalog)
 	else:
 		cat = client.get_events(limit=maxnumber, orderby="magnitude",starttime=starttime, endtime=endtime, minmagnitude=minmag, maxmagnitude=maxmag)
 	print(cat.__str__(print_all=True),file=sys.stderr)
