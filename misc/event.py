@@ -5,6 +5,10 @@ Select event ID from time and magnitude intervals.
 """
 from __future__ import print_function
 import sys
+from obspy import UTCDateTime	
+from obspy.clients.fdsn import Client
+import argparse
+from datetime import datetime, timedelta
 
 def event(baseurl='IRIS', 
 		starttime=None, 
@@ -13,9 +17,6 @@ def event(baseurl='IRIS',
 		maxmag=10., 
 		maxnumber=10, 
 		catalog=None):
-
-	from obspy import UTCDateTime	
-	from obspy.clients.fdsn import Client
 
 	try :
 		client = Client(baseurl)
@@ -49,8 +50,6 @@ def event(baseurl='IRIS',
 		print(e.resource_id)
 
 if __name__ == '__main__':
-	import argparse
-	from datetime import datetime, timedelta
 	parser = argparse.ArgumentParser(description=__doc__,
 				     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('-b', '--baseurl',    help='base URL of any FDSN web service or with a shortcut name which will be mapped to a FDSN URL.', default="IRIS")
