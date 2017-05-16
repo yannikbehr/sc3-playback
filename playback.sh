@@ -1,9 +1,9 @@
 #!/bin/bash
 
 PLAYBACKROOT="$( dirname "$( readlink -f "$0")")/"
-MAKEMSEEDPLAYBACK="${PLAYBACKROOT}make-mseed-playback.py"
-RUNPLAYBACK="${PLAYBACKROOT}playback.py"
-PLAYBACKDATA="${PLAYBACKROOT}data"
+MAKEMSEEDPLAYBACK="${PLAYBACKROOT}/make-mseed-playback.py"
+RUNPLAYBACK="${PLAYBACKROOT}/playback.py"
+PLAYBACKDATA="${PLAYBACKROOT}/data"
 PREPARATION="false"
 PLAYBACK="false"
 INVENTORY="inventory.xml"
@@ -317,7 +317,7 @@ then
 		# continuous data 
 		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
         	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
-		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} #-e "${EVNTFILE}"
+		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	else 
 		for TMPID in ${evids[@]}
 		do
@@ -325,7 +325,7 @@ then
 			EVTNAME=${TMPID##*/}
 			MSFILE=`ls "${PBDIR}/"*${EVTNAME}*.sorted-mseed`
 			EVNTFILE=`ls "${PBDIR}/"*${EVTNAME}*.xml`
-			"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} #-e "${EVNTFILE}"
+			"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 		done
 	
 	fi
