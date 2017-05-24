@@ -162,16 +162,20 @@ def setup_seedlink(fifofn):
 
 def setup_config(configdir, db):
     default = ei.configDir()
+    print(default)
     if configdir == default:
+	print('default conf dir')
         pass
     elif os.path.islink(default):
         # default configuration directory is already a link so it's
         # save to remove it without backup
+	print('linked default conf dir')
         os.unlink(default)
         os.symlink(configdir, default)
     elif os.path.isdir(default):
         # default configuration directory is a regular directory so we
         # back it up
+	print('spec conf dir')
         d = datetime.datetime.now().strftime("%Y%j%H%M%S")
         newdir = '_'.join((default, d, 'backup'))
         if os.path.isdir(newdir):
@@ -326,11 +330,16 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         start_module(mods.pop('kernel'))
         start_module(mods.pop('spread'))
         start_module(mods.pop('seedlink'))
-        start_module(mods.pop('scmaster'), '--config %s' % scmaster_cfg)
+        start_module(mods.pop('scmaster'), '--start-stop-msg=1 --config %s' % scmaster_cfg)
         for _n, _m in mods.iteritems():
 		start_module(mods[_n],'--plugins dbsqlite3,evscore,dmvs,dmsm,locnll,mlh -d "sqlite3://%s"' % database)
 	# manual starts a module in debug interactive mode
-	# os.system('scfinder --trace --plugins dbsqlite3,dmvs,dmsm,mlh -d sqlite3://%s &> /home/sysop/.seiscomp3/log/scfinder.log &' % database)
+	#os.system('scfinder --trace --plugins dbsqlite3,dmvs,dmsm,mlh -d sqlite3://%s &> /home/sysop/.seiscomp3/log/scfinder.log &' % database)
+	#os.system('scm --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
+	#os.system('scmm --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
+        #os.system('scrttv --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
+        #os.system('scolv --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
+
 	command.append(wf)
 	system(command)
         if eventfile is not None:
