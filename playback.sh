@@ -17,9 +17,11 @@ FILEIN=""
 ACTION=""
 MODE="historic"
 DELAYS=""
+MSVIEW=$HOME"/git/libmseed-2.18/example/msview"
 
 function loadsconf(){
-    if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
+    if [ -f "$CONFIGFILE" ]
+    then 
         echo Loading $CONFIGFILE ...
         source "$CONFIGFILE" || (echo Can t load configuration in $CONFIGFILE && exit 1)
 	export SEISCOMP_ROOT=$SEISCOMP_ROOT
@@ -327,7 +329,6 @@ fi
 
 if [ $FIX != "false" ]
 then
-	MSVIEW=$HOME"/git/libmseed-2.18/example/msview"
 	MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
 	if [ -z "$INVENTORYFILE" ]
 	then
