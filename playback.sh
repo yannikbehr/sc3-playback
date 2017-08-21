@@ -5,6 +5,7 @@ MAKEMSEEDPLAYBACK="${PLAYBACKROOT}/make-mseed-playback.py"
 RUNPLAYBACK="${PLAYBACKROOT}/playback.py"
 PLAYBACKDATA="${PLAYBACKROOT}/data"
 PREPARATION="false"
+FIX="false"
 PLAYBACK="false"
 INVENTORY="inventory.xml"
 CONFIG="config.xml"
@@ -16,9 +17,11 @@ FILEIN=""
 ACTION=""
 MODE="historic"
 DELAYS=""
+MSVIEW=$HOME"/git/libmseed-2.18/example/msview"
 
 function loadsconf(){
-    if [ -f "$CONFIGFILE" ]; then # deepest but does not prevails over the over
+    if [ -f "$CONFIGFILE" ]
+    then 
         echo Loading $CONFIGFILE ...
         source "$CONFIGFILE" || (echo Can t load configuration in $CONFIGFILE && exit 1)
 	export SEISCOMP_ROOT=$SEISCOMP_ROOT
@@ -36,8 +39,11 @@ Usage: $0 [Options] action
 Arguments:
     action          Decide what to do:
                       prep: Prepare playback files
-                      pb: run playback (requires a previous 'prep')
+		      pb: run playback (requires a previous 'prep')
                       all: do both in one go 
+		      fix: fix all missing bindings for stations in a given 
+                           inventory (see option --inventory-file)
+                     
 Options:
     -h              Show this message.
     --config-file   Use alternative playback configuration file. If none
@@ -47,10 +53,15 @@ Options:
                         3- ./playback.cfg (prevails all previous)
     --configdir     SeisComP3 configuration directory to use. (Default: 
                     ${HOME}/.seiscomp3).
+    --inventory-file Inventory file to use when fixing missing bindings.
+		    All the stations from this file will be playedback and 
+                    binded (global and scautopick). The inv2imp*.fdsnxml files
+                    in playback directory will be used by default if found.
 
   Event IDs:
     --evid          Give an eventID for playback.
     --fin           Give a file with one eventID per line for playback.
+    --tin           Give a file with one origin time per line for playback.
     
   Time window
     --begin         Give the starttime of a playback time window. Note that 
@@ -128,6 +139,25 @@ if [ -n "$FILEIN" ]; then
 	fi
 fi
 
+if [ -n "$TIMEIN" ]; then
+        index=0
+        my_re="....-..-..T..:..:...*"
+        while read line; do
+                if [[ ! $line =~ $my_re ]]; then
+                        evots[$index]=$line
+                        ((index++))
+                fi
+        done < $TIMEIN
+        TMP=`basename ${TIMEIN}`
+        PBDIR=${PLAYBACKDATA}/${TMP%\.*}a
+	echo this is not yet ready
+	exit 1
+        if [ ! -d "$PBDIR" ]; then
+                mkdir -p "$PBDIR"
+        fi
+	
+fi
+
 if [ -n "$EVENTID" ] ; then
 	evids[0]=$EVENTID
 	# get the last part of the event ID and use it to name the output 
@@ -170,6 +200,8 @@ if [ ${ACTION} == "prep" ]; then
 	PREPARATION="true"
 elif [ ${ACTION} == "pb" ]; then
 	PLAYBACK="true"
+elif [ ${ACTION} == "fix" ]; then
+	FIX="true"
 elif [ ${ACTION} == "all" ]; then
 	PREPARATION="true"
 	PLAYBACK="true"
@@ -213,7 +245,7 @@ function setupdb(){
 	cp "${PBDB}" "${PBDB%\.*}_no_event.sqlite" 
 }
 
-if [ "$#" -gt 7 ] || [ $# -lt 3 ]; then
+if [ "$#" -gt 9 ] || [ $# -lt 3 ]; then
 	echo "Too few command line arguments."
     usage
     exit 0
@@ -228,7 +260,9 @@ do
 		--end) END="$2";shift;;
 		--configdir) CONFIGDIR="$2";shift;;
 		--fin) FILEIN="$2"; shift;;
+		--tin) TIMEIN="$2"; shift;;
 		--config-file) CONFIGFILE="$2";shift;;
+		--inventory-file) INVENTORYFILE="$2";shift;;
 		--mode) MODE="$2"; shift;;
 		--delaytbl) DELAYTBL="$2";shift;;
 		-h) usage; exit 0;;
@@ -293,6 +327,118 @@ then
 	cd -
 fi
 
+if [ $FIX != "false" ]
+then
+	MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
+	if [ -z "$INVENTORYFILE" ]
+	then
+		INVENTORYFILE=$PBDIR"/inv2imp*.fdsnxml"
+	fi
+	echo Fixing with $INVENTORYFILE \(fdsnxml format required\)
+
+	echo "Fixing the host (or mseedfifo) database... (import all stations, bind all best components)"
+	ls ${INVENTORYFILE}| while read F
+	do
+		seiscomp exec import_inv fdsnxml $F
+	done
+
+	ls ${SEISCOMP_ROOT}/etc/key/seedlink/profile_pb || echo WARNING : MAKE A seedlink:pb PROFILE !!!! 
+	$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|grep ${CHANNEL}${ORIENTATION}|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L
+	do
+		if grep -q "seedlink" ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
+		then
+			sed -i 's/seedlink.*/seedlink:pb/' ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
+			echo OK binding seedlink:pb for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)	
+		else
+			echo Adds binding seedlink:pb for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
+			echo "seedlink:pb" >> ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
+		fi
+	done
+	seiscomp update-config
+
+	echo "Fixing the client (or processing) database... (clear blacklist, import all stations, bind all best components)"
+	cp $HOME/.seiscomp3/global.cfg $HOME/.seiscomp3/globalclient.cfg
+	echo "database.type = sqlite3" >> $HOME/.seiscomp3/globalclient.cfg 
+	echo "database.parameters = $HOME/test_db_no_event.sqlite" >> $HOME/.seiscomp3/globalclient.cfg
+	echo "plugins.dbPlugin.dbDriver = sqlite3" >> ~/.seiscomp3/globalclient.cfg
+	echo "plugins.dbPlugin.readConnection = $HOME/test_db_no_event.sqlite" >> $HOME/.seiscomp3/globalclient.cfg
+	echo "plugins.dbPlugin.writeConnection = $HOME/test_db_no_event.sqlite" >> $HOME/.seiscomp3/globalclient.cfg
+	cp ${PBDIR}/test_db_no_event.sqlite $HOME/test_db_no_event.sqlite
+	
+	cp $HOME/.seiscomp3/global.cfg $HOME/.seiscomp3/global.cfg.bu || exit 1 && cp $HOME/.seiscomp3/globalclient.cfg $HOME/.seiscomp3/global.cfg
+	seiscomp restart spread scmaster
+
+	ls ${INVENTORYFILE}| while read F
+	do
+		seiscomp exec import_inv fdsnxml $F
+	done
+
+	for ORIENTATION in "0," "3," "V," "Z,"
+	do
+		for CHANNEL in "_BH" "_SH" "_HN" "_EH" "_HH"
+		do 
+			$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|grep ${CHANNEL}${ORIENTATION}|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L 
+			do
+				LCODE=$L
+				if [ -z "$L" ]; then
+					LCODE="\"\""
+				fi
+				echo $N $S $C $L $LCODE
+
+				ls ${SEISCOMP_ROOT}/etc/key/scautopick/profile_Local || echo WARNING : MAKE A scautopick:Local PROFILE !!!!
+				if grep -q "scautopick" ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} 
+				then
+					echo OK binding scautopick:\* for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
+				else
+					echo Adds binding scautopick:Local for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
+					echo "scautopick:Local" >> ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
+				fi
+
+				PROFILE="auto"${C}${L}
+				while read F
+				do
+					if grep -q "detecStream = $C" $F
+					then
+						if grep -q "detecLocid = $LCODE" $F
+						then
+							PROFILE=${F/*_}
+							echo OK profile global:${PROFILE}: detecStream = $C and detecLocid = $LCODE \( $F \)
+							break
+						elif [ -z "$L" ] &&   ! grep -q "detecLocid" $F 
+						then
+							PROFILE=${F/*_}
+							echo OK profile global:${PROFILE}: detecStream = $C  \( $F \) 
+							break
+						fi
+					fi
+				done < <( ls ${SEISCOMP_ROOT}/etc/key/global/profile_* )
+				echo $PROFILE	
+				if [ -f ${SEISCOMP_ROOT}/etc/key/global/profile_${PROFILE} ] 
+				then
+					echo OK profile global:${PROFILE} \( ${SEISCOMP_ROOT}/etc/key/global/profile_${PROFILE} \)
+				else
+					echo Adds profile global:${PROFILE} \( ${SEISCOMP_ROOT}/etc/key/global/profile_${PROFILE} \)
+					echo "detecLocid = $LCODE" >> ${SEISCOMP_ROOT}/etc/key/global/profile_${PROFILE}
+					echo "detecStream = $C" >> ${SEISCOMP_ROOT}/etc/key/global/profile_${PROFILE}
+				fi
+	
+				if grep -q "global" ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} 
+				then
+					echo OK binding global:${PROFILE} for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
+					sed -i 's/global.*/global:'${PROFILE}'/' ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
+				else
+					echo Adds binding global:${PROFILE} for ${N}_${S}  \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
+					echo "global:${PROFILE}" >> ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
+				fi
+			done
+		done
+	done
+	seiscomp update-config
+	cp $HOME/.seiscomp3/global.cfg.bu $HOME/.seiscomp3/global.cfg || echo WARNING !!! $HOME/.seiscomp3/global.cfg recovery failed ! Recover with: $HOME/.seiscomp3/global.cfg.bu 
+	seiscomp restart spread scmaster
+	cp $HOME/test_db_no_event.sqlite ${PBDIR}/test_db_no_event.sqlite  || echo WARNING !!! ${PBDIR}/test_db_no_event.sqlite recovery failed ! Recover with: $HOME/test_db_no_event.sqlite
+fi
+
 if [ $PLAYBACK != "false" ]
 then
 	# prepare new db
@@ -307,7 +453,7 @@ then
 	ls  ${CONFIGDIR}/.logbu &>/dev/null ||    mv   ${CONFIGDIR}/log   ${CONFIGDIR}/.logbu
 	
 	# make sure seedlink will work, with fifo
-	${SEISCOMP_ROOT}/bin/seiscomp enable seedlink
+	seiscomp enable seedlink
 	sed -i 's;plugins\.mseedfifo\.fifo.*;plugins.mseedfifo.fifo = '${SEISCOMP_ROOT}'/var/run/seedlink/mseedfifo;' ${CONFIGDIR}/global.cfg
 	grep "plugins.mseedfifo.fifo" ${CONFIGDIR}/global.cfg
 
@@ -315,7 +461,7 @@ then
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ]
 	then	
 		# continuous data 
-		MSFILE=`ls "${PBDIR}"/*sorted-mseed`
+		MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
         	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
 		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	else 
@@ -323,7 +469,7 @@ then
 		do
 			# event data
 			EVTNAME=${TMPID##*/}
-			MSFILE=`ls "${PBDIR}/"*${EVTNAME}*.sorted-mseed`
+			MSFILE=`ls "${PBDIR}/"*${EVTNAME}*.sorted-mseed|head -1`
 			EVNTFILE=`ls "${PBDIR}/"*${EVTNAME}*.xml`
 			"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 		done
@@ -335,11 +481,11 @@ then
 	rm ${PBDIR}/xmldump/*.xml
 	scevtls --plugins dbsqlite3 -d "sqlite3://${PBDIR}/${PBDB}" |while read E 
 	do 
-		scxmldump --plugins dbsqlite3 -d "sqlite3://${PBDIR}/${PBDB}" -fPAMF -E $E -o ${PBDIR}/xmldump/${E//\//_}.xml 
+		scxmldump --plugins dbsqlite3 -d "sqlite3://${PBDIR}/${PBDB}" -fPAMF -E $E -o ${PBDIR}/xmldump/${E//\//_}.xml &>> ${CONFIGDIR}/log/scxmldump.logerr
 	done
 
 	# save the logs
-	rsync -avzl ${CONFIGDIR}/  ${PBDIR}/seiscomp3/ --exclude="*logbu*"
+	rsync -avzl ${CONFIGDIR}/  ${PBDIR}/seiscomp3/ --exclude="*logbu*"  &> ${PBDIR}/rsync.logerr
 	ls  ${CONFIGDIR}/log/* &>/dev/null && rm -r ${CONFIGDIR}/log
 	ls ${CONFIGDIR}/.logbu &>/dev/null && mv ${CONFIGDIR}/.logbu  ${CONFIGDIR}/log
 	
