@@ -339,7 +339,7 @@ then
 	echo "Fixing the host (or mseedfifo) database... (import all stations, bind all best components)"
 	ls ${INVENTORYFILE}| while read F
 	do
-		${SEISCOMP_ROOT}/bin/seiscomp exec import_inv fdsnxml $F
+		seiscomp exec import_inv fdsnxml $F
 	done
 
 	ls ${SEISCOMP_ROOT}/etc/key/seedlink/profile_pb || echo WARNING : MAKE A seedlink:pb PROFILE !!!! 
@@ -354,10 +354,10 @@ then
 			echo "seedlink:pb" >> ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
 		fi
 	done
-	${SEISCOMP_ROOT}/bin/seiscomp update-config
+	seiscomp update-config
 
 	echo "Fixing the client (or processing) database... (clear blacklist, import all stations, bind all best components)"
-	cat $HOME/.seiscomp3/global.cfg > $HOME/.seiscomp3/globalclient.cfg
+	cp $HOME/.seiscomp3/global.cfg $HOME/.seiscomp3/globalclient.cfg
 	echo "database.type = sqlite3" >> $HOME/.seiscomp3/globalclient.cfg 
 	echo "database.parameters = $HOME/test_db_no_event.sqlite" >> $HOME/.seiscomp3/globalclient.cfg
 	echo "plugins.dbPlugin.dbDriver = sqlite3" >> ~/.seiscomp3/globalclient.cfg
@@ -366,11 +366,11 @@ then
 	cp ${PBDIR}/test_db_no_event.sqlite $HOME/test_db_no_event.sqlite
 	
 	cp $HOME/.seiscomp3/global.cfg $HOME/.seiscomp3/global.cfg.bu || exit 1 && cp $HOME/.seiscomp3/globalclient.cfg $HOME/.seiscomp3/global.cfg
-	${SEISCOMP_ROOT}/bin/seiscomp restart spread scmaster
+	seiscomp restart spread scmaster
 
 	ls ${INVENTORYFILE}| while read F
 	do
-		${SEISCOMP_ROOT}/bin/seiscomp exec import_inv fdsnxml $F
+		seiscomp exec import_inv fdsnxml $F
 	done
 
 	for ORIENTATION in "0," "3," "V," "Z,"
@@ -433,10 +433,10 @@ then
 			done
 		done
 	done
-	${SEISCOMP_ROOT}/bin/seiscomp update-config
-	cp $HOME/.seiscomp3/global.cfg.bu $HOME/.seiscomp3/global.cfg
-	${SEISCOMP_ROOT}/bin/seiscomp restart spread scmaster
-	cp $HOME/test_db_no_event.sqlite ${PBDIR}/test_db_no_event.sqlite
+	seiscomp update-config
+	cp $HOME/.seiscomp3/global.cfg.bu $HOME/.seiscomp3/global.cfg || echo WARNING !!! $HOME/.seiscomp3/global.cfg recovery failed ! Recover with: $HOME/.seiscomp3/global.cfg.bu 
+	seiscomp restart spread scmaster
+	cp $HOME/test_db_no_event.sqlite ${PBDIR}/test_db_no_event.sqlite  || echo WARNING !!! ${PBDIR}/test_db_no_event.sqlite recovery failed ! Recover with: $HOME/test_db_no_event.sqlite
 fi
 
 if [ $PLAYBACK != "false" ]
@@ -453,7 +453,7 @@ then
 	ls  ${CONFIGDIR}/.logbu &>/dev/null ||    mv   ${CONFIGDIR}/log   ${CONFIGDIR}/.logbu
 	
 	# make sure seedlink will work, with fifo
-	${SEISCOMP_ROOT}/bin/seiscomp enable seedlink
+	seiscomp enable seedlink
 	sed -i 's;plugins\.mseedfifo\.fifo.*;plugins.mseedfifo.fifo = '${SEISCOMP_ROOT}'/var/run/seedlink/mseedfifo;' ${CONFIGDIR}/global.cfg
 	grep "plugins.mseedfifo.fifo" ${CONFIGDIR}/global.cfg
 
