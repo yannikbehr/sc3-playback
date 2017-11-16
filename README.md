@@ -2,14 +2,25 @@
 
 This collection of scripts can be used to run playbacks in SeisComP3 (SC3).
 
+Briefly, the scripts do the following tasks (but it is also possible to run each step independently):
+
+- Connect to an existing seiscomp3 installation (local or remote) and download the stations and binding information
+- Then, depending on command line options, download a miniseed containing the stations waveforms for the period of interest or the selected events
+- Create an sqlite3 database that will be used for the test (to avoid polluting existing databases or in case there is no database at all) and update stations/bindings configuration in there from the dowloaded one
+- Inject the dowloaded miniseed into seedlink (msrtsimul.py) via a system fifo. Optionally simulate historical time using libfaketime
+
+Seiscomp3 configuration requirements:
 - Since playback results are stored in an sqlite3 database, sqlite3 support has to be
 enabled in SC3.
 - bindings and meta data exist
 - seedlink has to be configured with the mseedfifo plugin
 - the mseedfifo has to exist and it has to be a named pipe
 
-Some of the scripts depend on the SC3 Python api so you have to make sure
-it is on `PYTHONPATH`. The api is typically located under `$ROOTDIR/lib/python`.
+Some of the scripts depend on the SC3 Python api and seiscomp environment variables, so you might prepend
+'seiscomp exec' in front of the commands or, even easier, you can open a shell session like the following
+and then run commands normally:
+
+    seiscomp exec bash
 
 The playback also depends on the library `libfaketime` which is used to simulate
 a different system time.
@@ -116,7 +127,7 @@ To do playbacks of all available data in a time span run:
 
 This will create all the necessary files for the playback in `data/yyyymmddHHMMSS-yyyymmddHHMMSS_N_events`.
 
-### Setting up and running the playback manually
+## Setting up and running the playback manually
 The `playback.sh` script is only a convenient wrapper around the two Python
 scripts `playback.py` and `make-mseed-playback.py`. Below are some notes in case
 you don't want to use the `playback.sh` script.
