@@ -1,6 +1,3 @@
-# SEISCOMP installtion to use (e.g. "/home/sysop/seiscomp3")
-SEISCOMP_ROOT=""
-
 # URL of the production machine
 HOST=""
 
