@@ -43,9 +43,10 @@ Arguments:
                       prep: Prepare playback files
 		      pb: run playback (requires a previous 'prep')
                       all: do both in one go 
-		      fix: fix all missing bindings for stations in a given 
-                           inventory (see option --inventory-file)
-                     
+		      fixhost: fix all missing bindings in the msrtsimul configuration
+			for stations in a given inventory (see option --inventory-file)
+                      fixhost: fix all missing bindings in the seiscomp configuration
+			for stations in a given inventory (see option --inventory-file)                     
 Options:
     -h              Show this message.
     --config-file   Use alternative playback configuration file. If none
@@ -57,8 +58,9 @@ Options:
                     ${HOME}/.seiscomp3).
     --inventory-file Inventory file to use when fixing missing bindings.
 		    All the stations from this file will be playedback and 
-                    binded (global and scautopick). The inv2imp*.fdsnxml files
+                    binded (global and scautopick). The inv2imp*.$INVENTORYFORMAT files
                     in playback directory will be used by default if found.
+    --inventory-format format of inventory file. Default is fdsnxml.
 
   Event IDs:
     --evid          Give an eventID for playback.
