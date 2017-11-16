@@ -6,6 +6,8 @@ RUNPLAYBACK="${PLAYBACKROOT}/playback.py"
 PLAYBACKDATA="${PLAYBACKROOT}/data"
 PREPARATION="false"
 FIX="false"
+FIXHOST="false"
+FIXCLIENT="false"
 PLAYBACK="false"
 INVENTORY="inventory.xml"
 CONFIG="config.xml"
@@ -202,6 +204,10 @@ elif [ ${ACTION} == "pb" ]; then
 	PLAYBACK="true"
 elif [ ${ACTION} == "fix" ]; then
 	FIX="true"
+elif [ ${ACTION} == "fixhost" ]; then
+        FIXHOST="true"
+elif [ ${ACTION} == "fixclient" ]; then
+        FIXHOST="true"
 elif [ ${ACTION} == "all" ]; then
 	PREPARATION="true"
 	PLAYBACK="true"
@@ -245,7 +251,7 @@ function setupdb(){
 	cp "${PBDB}" "${PBDB%\.*}_no_event.sqlite" 
 }
 
-if [ "$#" -gt 9 ] || [ $# -lt 3 ]; then
+if [ "$#" -gt 15 ] || [ $# -lt 3 ]; then
 	echo "Too few command line arguments."
     usage
     exit 0
@@ -263,6 +269,7 @@ do
 		--tin) TIMEIN="$2"; shift;;
 		--config-file) CONFIGFILE="$2";shift;;
 		--inventory-file) INVENTORYFILE="$2";shift;;
+                --inventory-format) INVENTORYFORMAT="$2";shift;;
 		--mode) MODE="$2"; shift;;
 		--delaytbl) DELAYTBL="$2";shift;;
 		-h) usage; exit 0;;
@@ -327,19 +334,24 @@ then
 	cd -
 fi
 
-if [ $FIX != "false" ]
+if [ $FIXHOST != "false" ]
 then
 	MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
+	if [ -z "$INVENTORYFORMAT" ]
+	then
+		INVENTORYFORMAT="fdsnxml"
+	fi
 	if [ -z "$INVENTORYFILE" ]
 	then
-		INVENTORYFILE=$PBDIR"/inv2imp*.fdsnxml"
+		INVENTORYFILE=$PBDIR"/inv2imp*."$INVENTORYFORMAT
 	fi
-	echo Fixing with $INVENTORYFILE \(fdsnxml format required\)
-
+	echo Fixing with $INVENTORYFILE \($INVENTORYFORMAT format and extension required\)
+	echo and with $MSFILE
 	echo "Fixing the host (or mseedfifo) database... (import all stations, bind all best components)"
+	rm ${SEISCOMP_ROOT}/etc/inventory/*xml
 	ls ${INVENTORYFILE}| while read F
 	do
-		seiscomp exec import_inv fdsnxml $F
+		seiscomp exec import_inv $INVENTORYFORMAT $F
 	done
 
 	ls ${SEISCOMP_ROOT}/etc/key/seedlink/profile_pb || echo WARNING : MAKE A seedlink:pb PROFILE !!!! 
@@ -355,6 +367,22 @@ then
 		fi
 	done
 	seiscomp update-config
+fi
+if [ $FIXCLIENT != "false" ]
+then
+
+        MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
+        if [ -z "$INVENTORYFORMAT" ]
+        then
+                INVENTORYFORMAT="fdsnxml"
+        fi
+        if [ -z "$INVENTORYFILE" ]
+        then
+                INVENTORYFILE=$PBDIR"/inv2imp*."$INVENTORYFORMAT
+        fi
+        echo Fixing with $INVENTORYFILE \($INVENTORYFORMAT format and extension required\)
+	echo and with $MSFILE
+	rm ${SEISCOMP_ROOT}/etc/inventory/*xml
 
 	echo "Fixing the client (or processing) database... (clear blacklist, import all stations, bind all best components)"
 	cp $HOME/.seiscomp3/global.cfg $HOME/.seiscomp3/globalclient.cfg
@@ -370,7 +398,7 @@ then
 
 	ls ${INVENTORYFILE}| while read F
 	do
-		seiscomp exec import_inv fdsnxml $F
+		seiscomp exec import_inv $INVENTORYFORMAT $F
 	done
 
 	for ORIENTATION in "0," "3," "V," "Z,"
