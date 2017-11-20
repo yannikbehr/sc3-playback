@@ -66,6 +66,8 @@ def system(args):
             continue
         except Exception, e:
             # Terminate was introduced in Python 2.6
+            tb = traceback.format_exc()
+            sys.stderr.write("Exception: %s" % tb)
             try:
                 proc.terminate()
             except:
@@ -164,18 +166,18 @@ def setup_config(configdir, db):
     default = ei.configDir()
     print(default)
     if configdir == default:
-	print('default conf dir')
+        print('default conf dir')
         pass
     elif os.path.islink(default):
         # default configuration directory is already a link so it's
         # save to remove it without backup
-	print('linked default conf dir')
+        print('linked default conf dir')
         os.unlink(default)
         os.symlink(configdir, default)
     elif os.path.isdir(default):
         # default configuration directory is a regular directory so we
         # back it up
-	print('spec conf dir')
+        print('spec conf dir')
         d = datetime.datetime.now().strftime("%Y%j%H%M%S")
         newdir = '_'.join((default, d, 'backup'))
         if os.path.isdir(newdir):
@@ -286,7 +288,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
 
     # construct msrtsimul command
     command = ["seiscomp", "exec", 
-	os.path.dirname(os.path.realpath(__file__))+"/msrtsimul.py"]
+    os.path.dirname(os.path.realpath(__file__))+"/msrtsimul.py"]
     if speed is not None:
         command += ["-s", speed]
     if jump is not None:
@@ -340,8 +342,10 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         #os.system('scrttv --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
         #os.system('scolv --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
 
-	command.append(wf)
-	system(command)
+        command.append(wf)
+
+        print('Executing: %s', command)
+        system(command)
         if eventfile is not None:
             system(dispatch_cmd)
         system(['seiscomp', 'stop'])
@@ -350,6 +354,8 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
             system(dispatch_cmd)
         system(['seiscomp', 'stop'])
     except Exception, e:
+        tb = traceback.format_exc()
+        sys.stderr.write("Exception: %s" % tb)
         sys.stderr.write("Exception: %s\n" % str(e))
         system(['seiscomp', 'stop'])
 

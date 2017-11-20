@@ -24,11 +24,6 @@ function loadsconf(){
     then 
         echo Loading $CONFIGFILE ...
         source "$CONFIGFILE" || (echo Can t load configuration in $CONFIGFILE && exit 1)
-	export SEISCOMP_ROOT=$SEISCOMP_ROOT
-	export LD_LIBRARY_PATH="$SEISCOMP_ROOT/lib:$LD_LIBRARY_PATH"
-	export PYTHONPATH="$SEISCOMP_ROOT/lib/python:$PYTHONPATH"
-	export MANPATH="$SEISCOMP_ROOT/man:$MANPATH"
-	export PATH="$SEISCOMP_ROOT/bin:$PATH"
     fi
 }
 
