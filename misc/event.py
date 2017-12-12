@@ -11,13 +11,6 @@ import argparse
 from datetime import datetime, timedelta
 
 def event(baseurl='IRIS', playback='date', **kwargs):
-#		baseurl='IRIS', 
-#		starttime=None, 
-#		endtime=None,
-#		minmag=3., 
-#		maxmag=10., 
-#		maxnumber=10, 
-#		catalog=None):
 
 	try :
 		client = Client(baseurl)
