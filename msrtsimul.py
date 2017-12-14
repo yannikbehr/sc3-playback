@@ -12,6 +12,7 @@ jump = 0
 test = False
 mode = 'realtime'
 starttime = None
+legalrecsize = 512
 
 def read_mseed_with_delays(delaydict, reciterable):
     """
@@ -205,6 +206,10 @@ try:
             time.sleep(0.01)
     sys.stderr.write("Starting msrtsimul at %s\n" % datetime.datetime.utcnow())
     for rec in input:
+        if rec.size != legalrecsize:
+            sys.stderr.write("Illegal rec.size : %s_%s %7.2f %s %7.2f\n" % (rec.net, rec.sta, (time.time() - stime), str(rec.begin_time),
+                                                         time.time() - calendar.timegm(rec.begin_time.timetuple())))
+            continue
         if time_diff is None:
             time_diff = datetime.datetime.utcnow() - rec.begin_time - \
                 datetime.timedelta(microseconds=1000000.0 * (rec.nsamp / rec.fsamp))
