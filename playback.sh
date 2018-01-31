@@ -5,6 +5,8 @@ MAKEMSEEDPLAYBACK="${PLAYBACKROOT}/make-mseed-playback.py"
 RUNPLAYBACK="${PLAYBACKROOT}/playback.py"
 PLAYBACKDATA="${PLAYBACKROOT}/data"
 PREPARATION="false"
+SETUPDATA="false"
+INITDB="false"
 FIX="false"
 FIXHOST="false"
 FIXCLIENT="false"
@@ -19,7 +21,7 @@ FILEIN=""
 ACTION=""
 MODE="historic"
 DELAYS=""
-MSVIEW=$HOME"/git/libmseed-2.18/example/msview"
+MSVIEW=$HOME"/libmseed-2.18/example/msview"
 
 function loadsconf(){
     if [ -f "$CONFIGFILE" ]
@@ -40,7 +42,7 @@ Arguments:
                       all: do both in one go 
 		      fixhost: fix all missing bindings in the msrtsimul configuration
 			for stations in a given inventory (see option --inventory-file)
-                      fixhost: fix all missing bindings in the seiscomp configuration
+                      fixclient: fix all missing bindings in the seiscomp configuration
 			for stations in a given inventory (see option --inventory-file)                     
 Options:
     -h              Show this message.
@@ -197,6 +199,10 @@ fi
 
 if [ ${ACTION} == "prep" ]; then
 	PREPARATION="true"
+elif [ ${ACTION} == "initdb" ]; then
+	INITDB="true"
+elif [ ${ACTION} == "setupdata" ]; then
+	SETUPDATA="true"
 elif [ ${ACTION} == "pb" ]; then
 	PLAYBACK="true"
 elif [ ${ACTION} == "fix" ]; then
@@ -204,7 +210,7 @@ elif [ ${ACTION} == "fix" ]; then
 elif [ ${ACTION} == "fixhost" ]; then
         FIXHOST="true"
 elif [ ${ACTION} == "fixclient" ]; then
-        FIXHOST="true"
+        FIXCLIENT="true"
 elif [ ${ACTION} == "all" ]; then
 	PREPARATION="true"
 	PLAYBACK="true"
@@ -217,6 +223,7 @@ fi
 }
 
 function setupdb(){
+	cd "$PBDIR"
 	if [ -n "$FILEIN" ] ||  [ -n "$EVENTID" ] ; then
 		for TMPID in ${evids[@]}; do
 			EVENTNAME=${TMPID##*/}
@@ -237,6 +244,12 @@ function setupdb(){
 	scxmldump -f -I $DBCONN  > $INVENTORY
 	echo "Retrieving configuration ..."
 	scxmldump -f -C $DBCONN  > $CONFIG
+	initdb
+	cd -
+}
+
+function initdb(){
+	cd "$PBDIR"
 	echo "Initializing sqlite database ..."
 	if [ -f "${PBDB}" ]; then
 		rm "${PBDB}"
@@ -246,12 +259,55 @@ function setupdb(){
 	scdb --plugins dbsqlite3 -d "sqlite3://${PBDB}" -i $INVENTORY
 	scdb --plugins dbsqlite3 -d "sqlite3://${PBDB}" -i $CONFIG
 	cp "${PBDB}" "${PBDB%\.*}_no_event.sqlite" 
+	cd -
+}
+
+function setupdata(){
+	cd "$PBDIR"
+	${SEISCOMP_ROOT}/bin/seiscomp check spread
+	# if no event requested, then one miniseed file for whole time span 
+	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] 
+	then
+		mkdir sds
+		mkdir datasets
+        	for R in ${RECORDURL}
+		do 
+			"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${R}" &> make-mseed-playback.logerr
+			${SEISCOMP_ROOT}/bin/scart -I  ${BEGIN/ /T}-sorted-mseed  sds/
+			mv ${BEGIN/ /T}-sorted-mseed datasets/${BEGIN/ /T}-${R//[:\/]*}-sorted-mseed
+		done
+		${SEISCOMP_ROOT}/bin/scart -c "*" -dsE -t "${BEGIN}~${END}" sds/ > ${BEGIN/ /T}-sorted-mseed
+		rm -r sds
+		echo "Examine data with:"
+		echo ${PBDIR}/make-mseed-playback.logerr
+		echo "scrttv --debug --offline --record-file ${PBDIR}/${BEGIN/ /T}.sorted-mseed"
+	
+	# otherwise process requested events individually 
+	else 
+		for TMPID in ${evids[@]}
+		do
+			mkdir sds
+			mkdir datasets
+			for R in ${RECORDURL}
+			do
+				"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "${R}" &> make-mseed-playback.logerr
+				${SEISCOMP_ROOT}/bin/scart -I  ${TMPID}-sorted-mseed  sds/
+				mv ${TMPID}-sorted-mseed datasets/${TMPID}-${R//[:\/]*}-sorted-mseed
+			done
+			${SEISCOMP_ROOT}/bin/scart -c "*" -dsE -t "1970-01-01 00:00~2999-01-01 00:00" sds/ > ${TMPID}-sorted-mseed
+			rm -r sds
+			echo "Examine data with:"
+			echo ${PBDIR}/make-mseed-playback.logerr
+			echo "scrttv --debug --offline --record-file \"${PBDIR}/${TMPID}\"*.sorted-mseed"
+		done
+	fi
+	cd -
 }
 
 if [ "$#" -gt 15 ] || [ $# -lt 3 ]; then
 	echo "Too few command line arguments."
-    usage
-    exit 0
+	usage
+	exit 0
 fi
 
 # Processing command line options
@@ -294,41 +350,31 @@ else
 fi
 
 processinput
-if [ ! -f "$MAKEMSEEDPLAYBACK" ] || [ ! -f "$RUNPLAYBACK" ]; then
+if [ ! -f "$MAKEMSEEDPLAYBACK" ] || [ ! -f "$RUNPLAYBACK" ]
+then
 	echo "You need the following dependencies:" 
 	echo $MAKEMSEEDPLAYBACK 
 	echo $RUNPLAYBACK
 	exit 1
 fi
 
+if [ $INITDB != "false" ]
+then 
+	echo "Init database ..."
+	initdb
+fi 
+
+if [ $SETUPDATA != "false" ]
+then
+	echo "Preparing waveforms ..."
+	setupdata
+fi
+
 if [ $PREPARATION != "false" ]
 then
 	echo "Preparing playback files ..."
-	cd "$PBDIR"
-	if [ "$MODE" != "offline" ]
-	then
-		setupdb
-	fi
-	
-	${SEISCOMP_ROOT}/bin/seiscomp check spread
-	# if no event requested, then one miniseed file for whole time span 
-	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] 
-	then
-        	"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} --debug --start ${BEGIN/ /T} --end ${END/ /T}  -I "${RECORDURL}"
-		echo "Examine data with:"
-		echo "scrttv --debug --offline --record-file ${PBDIR}/*sorted-mseed"
-	
-	# otherwise process requested events individually 
-	else 
-		for TMPID in ${evids[@]}
-		do
-			"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "${RECORDURL}" 
-			#"sdsarchive://${SDSARCHIVE}"
-			echo "Examine data with:"
-			echo "scrttv --debug --offline --record-file \"${PBDIR}/${TMPID}\"*.sorted-mseed"
-		done
-	fi
-	cd -
+	setupdb	
+	setupdata
 fi
 
 if [ $FIXHOST != "false" ]
@@ -352,7 +398,7 @@ then
 	done
 
 	ls ${SEISCOMP_ROOT}/etc/key/seedlink/profile_pb || echo WARNING : MAKE A seedlink:pb PROFILE !!!! 
-	$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|grep ${CHANNEL}${ORIENTATION}|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L
+	$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L
 	do
 		if grep -q "seedlink" ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
 		then
@@ -392,15 +438,15 @@ then
 	
 	cp $HOME/.seiscomp3/global.cfg $HOME/.seiscomp3/global.cfg.bu || exit 1 && cp $HOME/.seiscomp3/globalclient.cfg $HOME/.seiscomp3/global.cfg
 	seiscomp restart spread scmaster
-
+		
 	ls ${INVENTORYFILE}| while read F
 	do
 		seiscomp exec import_inv $INVENTORYFORMAT $F
 	done
-
+	
 	for ORIENTATION in "0," "3," "V," "Z,"
 	do
-		for CHANNEL in "_BH" "_SH" "_HN" "_EH" "_HH"
+		for CHANNEL in "_BH" "_HN" "_SH" "_EH" "_HH"
 		do 
 			$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|grep ${CHANNEL}${ORIENTATION}|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L 
 			do
