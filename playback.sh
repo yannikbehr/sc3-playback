@@ -9,6 +9,7 @@ SETUPDATA="false"
 INITDB="false"
 FIX="false"
 FIXHOST="false"
+SETUPDB="false"
 FIXCLIENT="false"
 PLAYBACK="false"
 INVENTORY="inventory.xml"
@@ -201,6 +202,8 @@ if [ ${ACTION} == "prep" ]; then
 	PREPARATION="true"
 elif [ ${ACTION} == "initdb" ]; then
 	INITDB="true"
+elif [ ${ACTION} == "setupdb" ]; then
+        SETUPDB="true"
 elif [ ${ACTION} == "setupdata" ]; then
 	SETUPDATA="true"
 elif [ ${ACTION} == "pb" ]; then
@@ -254,7 +257,11 @@ function initdb(){
 	if [ -f "${PBDB}" ]; then
 		rm "${PBDB}"
 	fi
-	sqlite3 -batch -init "$SQLITEINIT" "$PBDB" .exit
+	for INIT in $SQLITEINIT
+	do 
+		echo sqlite3 -batch -init "$INIT"
+		sqlite3 -batch -init "$INIT" "$PBDB" .exit
+	done
    	echo "Populating sqlite database ..."
 	scdb --plugins dbsqlite3 -d "sqlite3://${PBDB}" -i $INVENTORY
 	scdb --plugins dbsqlite3 -d "sqlite3://${PBDB}" -i $CONFIG
@@ -368,6 +375,12 @@ if [ $SETUPDATA != "false" ]
 then
 	echo "Preparing waveforms ..."
 	setupdata
+fi
+
+if [ $SETUPDB != "false" ]
+then
+        echo "Preparing waveforms ..."
+        setupdb
 fi
 
 if [ $PREPARATION != "false" ]
