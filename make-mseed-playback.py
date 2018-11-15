@@ -4,7 +4,7 @@ import sys, time, traceback
 import seiscomp3.Client, seiscomp3.DataModel
 import re
 
-stream_whitelist = ["HH", "EH", "HG", "HN"]
+stream_whitelist = ["HH", "EH", "SH", "HG", "HN", "EN", "EG","SN"]
 component_whitelist = []  # set to ["Z"] for vertical component only
 network_blacklist = ["DK"]
 network_whitelist = []  # all except blacklist
@@ -121,7 +121,7 @@ class DumperApp(seiscomp3.Client.Application):
             if not netsta in netsta_streams:
                 netsta_streams[netsta] = []
             netsta_streams[netsta].append((net, sta, loc, cha))
-
+        print(netsta_streams)
         data = []
         netsta_keys = netsta_streams.keys()
         netsta_keys.sort()
@@ -220,6 +220,7 @@ class DumperApp(seiscomp3.Client.Application):
             t1, t2 = t0 + seiscomp3.Core.TimeSpan(-before), t0 + seiscomp3.Core.TimeSpan(after)
 
             self.get_and_write_data(t1, t2, out)
+            print(t1,t0,t2)
             return True
 
         except:

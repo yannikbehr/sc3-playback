@@ -243,10 +243,17 @@ function setupdb(){
 		echo scxmldump --debug -f -E "${EVENTSIDLIST}" -P -A -M -F ${DBCONN}
 		scxmldump --debug -f -E "${EVENTSIDLIST}" -P -A -M -F ${DBCONN} > ${EVENTNAME}.xml
 	fi
-	echo "Retrieving inventory ..."
-	scxmldump -f -I $DBCONN  > $INVENTORY
-	echo "Retrieving configuration ..."
-	scxmldump -f -C $DBCONN  > $CONFIG
+	if [ -z "${DBCONNIC}" ]; then
+		echo "Retrieving inventory from $DBCONN ..."
+	        scxmldump -f -I $DBCONN  > $INVENTORY
+        	echo "Retrieving configuration from $DBCONN..."
+        	scxmldump -f -C $DBCONN  > $CONFIG
+	else
+		echo "Retrieving inventory from $DBCONNIC ..."
+		scxmldump -f -I $DBCONNIC  > $INVENTORY
+		echo "Retrieving configuration from $DBCONNIC..."
+		scxmldump -f -C $DBCONNIC  > $CONFIG
+	fi
 	initdb
 	cd -
 }
@@ -297,7 +304,12 @@ function setupdata(){
 			mkdir datasets
 			for R in ${RECORDURL}
 			do
-				"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "${R}" &> make-mseed-playback.logerr
+				echo $R
+				if [ -z "${DBCONNIC}" ]; then
+					"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "${R}" &> make-mseed-playback.logerr
+				else
+					"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONNIC} -E ${TMPID} -I "${R}" &> make-mseed-playback.logerr
+				fi
 				${SEISCOMP_ROOT}/bin/scart -I  ${TMPID}-sorted-mseed  sds/
 				mv ${TMPID}-sorted-mseed datasets/${TMPID}-${R//[:\/]*}-sorted-mseed
 			done
@@ -547,6 +559,7 @@ then
 		# continuous data 
 		MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
         	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
+
 		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	else 
 		for TMPID in ${evids[@]}

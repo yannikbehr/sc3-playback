@@ -334,7 +334,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         start_module(mods.pop('seedlink'))
         start_module(mods.pop('scmaster'), '--start-stop-msg=1 --config %s' % scmaster_cfg)
         for _n, _m in mods.iteritems():
-		start_module(mods[_n],'--plugins dbsqlite3,evscore,dmvs,dmsm,locnll,mlh -d "sqlite3://%s"' % database)
+		start_module(mods[_n],'--plugins dbsqlite3,dmvs,dmsm,locnll,mlh -d "sqlite3://%s"' % database)
 	# manual starts a module in debug interactive mode
 	#os.system('scfinder --trace --plugins dbsqlite3,dmvs,dmsm,mlh -d sqlite3://%s &> /home/sysop/.seiscomp3/log/scfinder.log &' % database)
 	#os.system('scm --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
