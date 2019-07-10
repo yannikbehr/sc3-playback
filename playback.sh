@@ -271,7 +271,7 @@ function initdb(){
 
 function setupdata(){
 	cd "$PBDIR"
-	${SEISCOMP_ROOT}/bin/seiscomp check spread
+	${SEISCOMP_ROOT}/bin/seiscomp restart spread scmaster
 	# if no event requested, then one miniseed file for whole time span 
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ] 
 	then
