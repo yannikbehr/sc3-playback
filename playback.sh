@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SCAUTOPICK="scautopick"
+PICKPROFILE="Local"
 PLAYBACKROOT="$( dirname "$( readlink -f "$0")")/"
 MAKEMSEEDPLAYBACK="${PLAYBACKROOT}/make-mseed-playback.py"
 RUNPLAYBACK="${PLAYBACKROOT}/playback.py"
@@ -89,6 +91,9 @@ Options:
                     CH.AIGLE: 5.2
                     CH.VANNI: 3.5
                     ...
+  fixclient
+    --scautopick    Alias name of scautopick to be bound (Default: 'scautopick').
+    --profile       Name of the scautopick profile fto be bound (Default: 'Local').
 EOF
 }
 
@@ -344,6 +349,8 @@ do
                 --inventory-format) INVENTORYFORMAT="$2";shift;;
 		--mode) MODE="$2"; shift;;
 		--delaytbl) DELAYTBL="$2";shift;;
+		--scautopick) SCAUTOPICK="$2";shift;;
+		--profile) PICKPROFILE="$2";shift;;
 		-h) usage; exit 0;;
 		-*) usage			
 			exit 1;;
@@ -407,11 +414,11 @@ then
 	MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
 	if [ -z "$INVENTORYFORMAT" ]
 	then
-		INVENTORYFORMAT="fdsnxml"
+		INVENTORYFORMAT="sc3"
 	fi
 	if [ -z "$INVENTORYFILE" ]
 	then
-		INVENTORYFILE=$PBDIR"/inv2imp*."$INVENTORYFORMAT
+		INVENTORYFILE=$PBDIR"/inventory.xml"
 	fi
 	echo Fixing with $INVENTORYFILE \($INVENTORYFORMAT format and extension required\)
 	echo and with $MSFILE
@@ -442,11 +449,11 @@ then
         MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
         if [ -z "$INVENTORYFORMAT" ]
         then
-                INVENTORYFORMAT="fdsnxml"
+                INVENTORYFORMAT="sc3"
         fi
         if [ -z "$INVENTORYFILE" ]
         then
-                INVENTORYFILE=$PBDIR"/inv2imp*."$INVENTORYFORMAT
+                INVENTORYFILE=$PBDIR"/inventory.xml"
         fi
         echo Fixing with $INVENTORYFILE \($INVENTORYFORMAT format and extension required\)
 	echo and with $MSFILE
@@ -471,7 +478,7 @@ then
 	
 	for ORIENTATION in "0," "3," "V," "Z,"
 	do
-		for CHANNEL in "_BH" "_HN" "_SH" "_EH" "_HH"
+		for CHANNEL in "_BH" "_SN" "_EN" "_HN" "_SH" "_EH" "_HH"
 		do 
 			$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|grep ${CHANNEL}${ORIENTATION}|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L 
 			do
@@ -481,13 +488,13 @@ then
 				fi
 				echo $N $S $C $L $LCODE
 
-				ls ${SEISCOMP_ROOT}/etc/key/scautopick/profile_Local || echo WARNING : MAKE A scautopick:Local PROFILE !!!!
+				ls ${SEISCOMP_ROOT}/etc/key/$SCAUTOPICK/profile_$PICKPROFILE || echo WARNING : MAKE A $SCAUTOPICK:$PICKPROFILE PROFILE !!!!
 				if grep -q "scautopick" ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} 
 				then
-					echo OK binding scautopick:\* for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
+					echo OK binding $SCAUTOPICK:\* for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
 				else
-					echo Adds binding scautopick:Local for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
-					echo "scautopick:Local" >> ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
+					echo Adds binding $SCAUTOPICK:$PICKPROFILE for ${N}_${S} \( ${SEISCOMP_ROOT}/etc/key/station_${N}_${S} \)
+					echo "$SCAUTOPICK:$PICKPROFILE" >> ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
 				fi
 
 				PROFILE="auto"${C}${L}
@@ -588,5 +595,5 @@ then
 	
 	# print next step
 	echo "Examine results with:"
-	echo "scolv --offline --debug --plugins dbsqlite3 -d \"sqlite3://${PBDIR}/${PBDB}\" -I \"$MSFILE\"" 	
+	echo "scolv --offline --debug -d \"sqlite3://${PBDIR}/${PBDB}\" -I \"$MSFILE\"" 	
 fi
