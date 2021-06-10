@@ -1,5 +1,6 @@
 #!/bin/bash
 
+RADIUS="300"
 SCAUTOPICK="scautopick"
 PICKPROFILE="Local"
 PLAYBACKROOT="$( dirname "$( readlink -f "$0")")/"
@@ -25,6 +26,32 @@ ACTION=""
 MODE="historic"
 DELAYS=""
 MSVIEW=$HOME"/libmseed-2.18/example/msview"
+
+function get_start_time(){
+	python -c 'import seiscomp3.IO,seiscomp3.Kernel,datetime
+from seiscomp3 import Config, System
+
+stream = seiscomp3.IO.RecordStream.Open("file://'$1'")
+input = seiscomp3.IO.RecordInput(stream, seiscomp3.Core.Array.INT,
+			     seiscomp3.Core.Record.SAVE_RAW)
+tmin = datetime.datetime.utcnow()
+while True:
+	try:
+		rec = input.next()
+	except:
+		break
+	if not rec:
+		break
+	te = rec.endTime().toString("%FT%T.%4fZ")
+	ts = rec.startTime().toString("%FT%T.%4fZ")
+	dts = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%fZ")
+	dte = datetime.datetime.strptime(te, "%Y-%m-%dT%H:%M:%S.%fZ")
+	if dte < tmin:
+		tmin = dte
+		Id = rec.streamID()
+print(tmin)
+'
+}
 
 function loadsconf(){
     if [ -f "$CONFIGFILE" ]
@@ -64,6 +91,7 @@ Options:
 
   Event IDs:
     --evid          Give an eventID for playback.
+    --radius        Give a radius in km to use stations in.
     --fin           Give a file with one eventID per line for playback.
     --tin           Give a file with one origin time per line for playback.
     
@@ -234,9 +262,12 @@ function setupdb(){
 	cd "$PBDIR"
 	if [ -n "$FILEIN" ] ||  [ -n "$EVENTID" ] ; then
 		for TMPID in ${evids[@]}; do
-			EVENTNAME=${TMPID##*/}
+			EVENTNAME=${TMPID//\//_} 
 			echo "Retrieving event information for ${TMPID} ..."
+			echo ${EVENTNAME}.xml and ${EVENTNAME}.xmllight
 			scxmldump --debug -f -E ${TMPID} -P -A -M -F ${DBCONN} > ${EVENTNAME}.xml
+			scxmldump --debug -f -E ${TMPID} -a -M  ${DBCONN} > ${EVENTNAME}.xmllight
+			scxmldump --debug -f -E ${TMPID} -p -P  ${DBCONN} > ${EVENTNAME}.xmlpref
 		done
 	else
 		EVENTNAME=${#evids[@]}_events 
@@ -311,9 +342,9 @@ function setupdata(){
 			do
 				echo $R
 				if [ -z "${DBCONNIC}" ]; then
-					"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -I "${R}" &> make-mseed-playback.logerr
+					"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONN} -E ${TMPID} -R ${RADIUS} -I "${R}" &> make-mseed-playback.logerr
 				else
-					"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONNIC} -E ${TMPID} -I "${R}" &> make-mseed-playback.logerr
+					"$MAKEMSEEDPLAYBACK"  -u playback -H ${HOST} ${DBCONNIC} -E ${TMPID} -R ${RADIUS} -I "${R}" &> make-mseed-playback.logerr
 				fi
 				${SEISCOMP_ROOT}/bin/scart -I  ${TMPID}-sorted-mseed  sds/
 				mv ${TMPID}-sorted-mseed datasets/${TMPID}-${R//[:\/]*}-sorted-mseed
@@ -339,6 +370,7 @@ while [ $# -gt 1 ]
 do
 	case "$1" in 
 		--evid) EVENTID="$2";shift;;
+                --radius) RADIUS="$2";shift;;
 		--begin) BEGIN="$2";shift;;
 		--end) END="$2";shift;;
 		--configdir) CONFIGDIR="$2";shift;;
@@ -430,7 +462,8 @@ then
 	done
 
 	ls ${SEISCOMP_ROOT}/etc/key/seedlink/profile_pb || echo WARNING : MAKE A seedlink:pb PROFILE !!!! 
-	$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L
+	#$MSVIEW $MSFILE 
+	ls "${PBDIR}"/*sorted-mseed|while read MSF;do $MSVIEW $MSF;done|awk '{print $1}'|sort|uniq|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L
 	do
 		if grep -q "seedlink" ${SEISCOMP_ROOT}/etc/key/station_${N}_${S}
 		then
@@ -456,7 +489,7 @@ then
                 INVENTORYFILE=$PBDIR"/inventory.xml"
         fi
         echo Fixing with $INVENTORYFILE \($INVENTORYFORMAT format and extension required\)
-	echo and with $MSFILE
+	echo and with "${PBDIR}"/*sorted-mseed
 	rm ${SEISCOMP_ROOT}/etc/inventory/*xml
 
 	echo "Fixing the client (or processing) database... (clear blacklist, import all stations, bind all best components)"
@@ -475,12 +508,14 @@ then
 	do
 		seiscomp exec import_inv $INVENTORYFORMAT $F
 	done
-	
+
+	ls "${PBDIR}"/*sorted-mseed|while read MSF;do $MSVIEW $MSF;done|awk '{print $1}'|sort|uniq > NSCL.all 
 	for ORIENTATION in "0," "3," "V," "Z,"
 	do
-		for CHANNEL in "_BH" "_SN" "_EN" "_HN" "_SH" "_EH" "_HH"
+		for CHANNEL in "_BH" "_SN" "_EN" "_HN" "_HG" "_SH" "_EH" "_HH"
 		do 
-			$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|grep ${CHANNEL}${ORIENTATION}|awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L 
+			#$MSVIEW $MSFILE |awk '{print $1}'|sort|uniq|
+			grep ${CHANNEL}${ORIENTATION} NSCL.all |awk -F"[,_]" '{print $1,$2,$4,$3}'|while read N S C L 
 			do
 				LCODE=$L
 				if [ -z "$L" ]; then
@@ -559,27 +594,33 @@ then
 	seiscomp enable seedlink
 	sed -i 's;plugins\.mseedfifo\.fifo.*;plugins.mseedfifo.fifo = '${SEISCOMP_ROOT}'/var/run/seedlink/mseedfifo;' ${CONFIGDIR}/global.cfg
 	grep "plugins.mseedfifo.fifo" ${CONFIGDIR}/global.cfg
-
+	
 	# run the playback
+	cp "${PBDIR}/${PBDB}" tmp.sqlite
 	if [ -z "$EVENTID" ] && [ -z "$FILEIN" ]
 	then	
 		# continuous data 
 		MSFILE=`ls "${PBDIR}"/*sorted-mseed|head -1`
         	EVNTFILE=`ls "${PBDIR}"/*_events.xml`
 
-		"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
+		"$RUNPLAYBACK"  tmp.sqlite "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 	else 
 		for TMPID in ${evids[@]}
 		do
 			# event data
-			EVTNAME=${TMPID##*/}
+			EVTNAME=${TMPID//\//_}
 			MSFILE=`ls "${PBDIR}/"*${EVTNAME}*.sorted-mseed|head -1`
 			EVNTFILE=`ls "${PBDIR}/"*${EVTNAME}*.xml`
-			"$RUNPLAYBACK"  "${PBDIR}/${PBDB}" "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
+			STARTTIME=`get_start_time ${MSFILE}`
+			STARTTIME=${STARTTIME//-/}
+			STARTTIME=${STARTTIME:0:8}
+			ls ~/.seiscomp3/licenses/scanloc_????????_????????.crt |awk -F'_' '($2*1<='${STARTTIME}') {print "cp -v",$0,"~/.seiscomp3/licenses/scanloc.crt"}'|tail -1|$SHELL
+			"$RUNPLAYBACK" tmp.sqlite  "${MSFILE}" "${DELAYS}" -c "${CONFIGDIR}" -m ${MODE} -e "${EVNTFILE}"
 		done
 	
 	fi
-	
+	cp tmp.sqlite "${PBDIR}/${PBDB}"
+
 	# export the results
 	mkdir -p ${PBDIR}/xmldump
 	rm ${PBDIR}/xmldump/*.xml
