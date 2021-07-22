@@ -629,10 +629,21 @@ then
 		scxmldump --plugins dbsqlite3 -d "sqlite3://${PBDIR}/${PBDB}" -fPAMF -E $E -o ${PBDIR}/xmldump/${E//\//_}.xml &>> ${CONFIGDIR}/log/scxmldump.logerr
 	done
 
+	# save the conf
+	rsync -avzl --delete \
+		--include "*cfg" --exclude="*" \
+		${SEISCOMP_ROOT}/etc/ ${PBDIR}/seiscomp_root-etc/
 	# save the logs
-	rsync -avzl ${CONFIGDIR}/  ${PBDIR}/seiscomp3/ --exclude="*logbu*"  &> ${PBDIR}/rsync.logerr
-	ls  ${CONFIGDIR}/log/* &>/dev/null && rm -r ${CONFIGDIR}/log
-	ls ${CONFIGDIR}/.logbu &>/dev/null && mv ${CONFIGDIR}/.logbu  ${CONFIGDIR}/log
+	rsync -avzl ${CONFIGDIR}/  ${PBDIR}/seiscomp3/ \
+		--exclude="sc*v.cfg" \
+		--exclude="*logbu*" \
+		--exclude="*NLL*" \
+		--exclude="*nll*"  \
+		--exclude="*global.cfg.bu"  \
+		--exclude="*globalclient.cfg"  &> ${PBDIR}/rsync.logerr
+	
+	ls ${CONFIGDIR}/log/*  &>/dev/null && rm -r ${CONFIGDIR}/log
+	ls ${CONFIGDIR}/.logbu &>/dev/null &&    mv ${CONFIGDIR}/.logbu  ${CONFIGDIR}/log
 	
 	# print next step
 	echo "Examine results with:"
