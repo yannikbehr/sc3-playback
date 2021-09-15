@@ -14,6 +14,7 @@ from obspy import UTCDateTime, Stream
 import numpy as np
 import ipdb
 
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
 def myhash(args, kwds):
     self = args[0]
@@ -35,8 +36,7 @@ def myhash(args, kwds):
 
 class EventData:
 
-    def __init__(self, event, savedir='/tmp', radius=2., offset_before=600,
-                 offset_after=600):
+    def __init__(self, event, savedir='/tmp', radius=2.):
         """
         Parameters:
         -----------
@@ -52,12 +52,13 @@ class EventData:
                       Number of seconds after event
                       time to end waveform request
         """
-        self.mylogger = logging.getLogger('MyLogger')
-        self.mylogger.setLevel(logging.ERROR)
         self.client = FDSN_Client(base_url='http://service.geonet.org.nz',
                                   debug=False)
-        self.t1 = UTCDateTime(event['time']) - offset_before
-        self.t2 = UTCDateTime(event['time']) + offset_after
+        preevent = int(event['preevent time'])
+        postevent = int(event['postevent time'])
+        self.t1 = UTCDateTime(event['time']) - preevent 
+        self.t2 = UTCDateTime(event['time']) + postevent 
+        logging.debug('Starttime: %s; Endtime: %s', self.t1, self.t2)
         self.latitude = event['lat']
         self.longitude = event['lon']
         self.radius = radius
@@ -66,7 +67,7 @@ class EventData:
                                        'HN1', 'HN2', 'HH1',
                                        'HH2'])
         if not os.path.isdir(savedir):
-            print("Creating download directory \n {:s}".format(savedir))
+            logging.info("Creating download directory \n {:s}".format(savedir))
             os.makedirs(savedir)
         self.filename = os.path.join(savedir, event['name']+'.ms')
 
@@ -83,7 +84,7 @@ class EventData:
 
     def get_waveforms(self, rmresponse=False, rmsensitivity=True):
 
-        print("Starting to request data for:")
+        logging.info("Starting waveform requests")
         stmain = Stream()
         for net in self.inv:
            for stat in net:
@@ -93,7 +94,11 @@ class EventData:
                         nslc = nslc.format(net.code, stat.code,
                                            chan.location_code,
                                            chan.code)
-                        print("---> {}".format(nslc))
+                        logstr = "Request: {}; starttime: {}; endtime: {}\n"
+                        logstr += "rm response: {}; rm sensitivity: {}"
+                        logstr = logstr.format(nslc, self.t1, self.t2,
+                                               rmresponse, rmsensitivity)
+                        logging.info(logstr)
                         st = self.client.get_waveforms(net.code, stat.code,
                                                        chan.location_code, chan.code,
                                                        self.t1, self.t2,
@@ -104,8 +109,7 @@ class EventData:
                             st.remove_sensitivity()
                         stmain += st
                    except Exception as e:
-                        print(e)
-                        self.mylogger.error("%s" % nslc)
+                        logging.warning(e)
                         continue
         stmain.write(self.filename, format='MSEED')
 
