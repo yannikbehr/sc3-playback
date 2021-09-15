@@ -1,0 +1,16 @@
+name: finder
+channels:
+    - conda-forge
+    - bioconda 
+dependencies:
+    - python=3.7
+    - pyproj=3.1
+    - obspy>=1.2
+    - matplotlib=3.2.1
+    - xarray
+    - cartopy
+    - ipdb
+    - snakemake
+    - pip
+    - pip:
+        - cachier
