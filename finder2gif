@@ -1,0 +1,73 @@
+#!/bin/bash
+#set -x #echo on
+DATADIR=""
+FINDERFILE=$SEISCOMP_ROOT"/share/FinDer/finder_file/finder_run"
+DENSITY=72
+
+function usage(){
+cat <<EOF
+Usage: $0 [Options] 
+Generate gif file from Finder output.
+
+Arguments:
+    Config-file
+    Finder-output-folder 
+Optional Arguments:
+    -h, --help              Show this message.
+    --datadir               Provide alternative data directory.
+	--density				Image resolution in dpi (see convert manual).
+EOF
+}
+
+
+
+POSITIONAL=()
+# Processing command line options
+while [ $# -gt 0 ]
+do
+	case "$1" in 
+        --datadir) DATADIR="$2";shift;;
+		--density) DENSITY=$2;shift;;
+		-h) usage; exit 0;;
+		-*) usage			
+			exit 1;;
+        *) POSITIONAL+=("$1");;
+	esac
+	shift	
+done
+
+# Set positional parameters to the contents of POSITIONAL
+set -- "${POSITIONAL[@]}" 
+
+if [ $# -ne 2 ]; then
+    usage
+    exit 1
+fi
+
+CONFIGF=$1
+FINDERD=$2
+
+if [ -z $DATADIR ];then
+    DATADIR=$(dirname ${FINDERD})
+fi
+cd $DATADIR
+
+
+CONF=$(basename ${CONFIGF})_PS
+sed 's/GMT_PLOT .*/GMT_PLOT yes/' ${CONFIGF} > $CONF
+sed -i 's/DATA_FOLDER .*/DATA_FOLDER tmp_finder_gif/' $CONF
+mkdir -p tmp_finder_gif/temp
+
+events=($(ls ${FINDERD}))
+for event in ${events[@]};do
+	rm tmp_finder_gif/temp/*ps tmp_finder_gif/temp/*jpg
+	$FINDERFILE $CONF ${FINDERD}/${event} 0 $(ls ${FINDERD}/${event}/data*|wc -l) live
+
+	ls -ltr tmp_finder_gif/temp/*ps| awk '{print $NF}' |while read F
+	do 
+		convert -density $DENSITY  $F ${F}.jpg 
+	done 
+	convert -verbose -delay 50 -loop 0 \
+	-density $DENSITY $( ls -ltr tmp_finder_gif/temp/*jpg| awk '{print $NF}' ) \
+	${FINDERD}/${event}.gif     
+done
