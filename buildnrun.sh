@@ -58,14 +58,14 @@ if [ "${BUILD}" == "true" ]; then
 fi
 
 if [ "${PUSH}" != "false" ]; then
-    docker tag ${IMAGE}:${TAG} huta17-d.gns.cri.nz:5000/yannik/pumahu:${TAG}
-    docker push huta17-d.gns.cri.nz:5000/yannik/pumahu:${TAG}
+    docker tag ${IMAGE}:${TAG} huta17-d.gns.cri.nz:5000/yannik/${IMAGE}:${TAG}
+    docker push huta17-d.gns.cri.nz:5000/yannik/${IMAGE}:${TAG}
 fi
 
 if [ "${INTERACTIVE}" == "true" ]; then
-    docker run -it --name ${CONTAINER} \
-      -v $PWD/data:/home/sysop/data \
-      -v $PWD/sc3-playback:/home/sysop/sc3-playback \
+    docker run -it --rm \
+      -v $RCET_DATA:/home/sysop/data \
+      -v $PWD:/home/sysop/sc3-playback \
     ${IMAGE}:${TAG} bash
       #--link seiscomp3:postgres_db
       #-v $PWD/dot_seiscomp3:/home/sysop/.seiscomp3 \
