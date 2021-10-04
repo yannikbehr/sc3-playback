@@ -14,6 +14,7 @@ def ms_starttime(filename):
     input = seiscomp3.IO.RecordInput(stream, seiscomp3.Core.Array.INT,
                      seiscomp3.Core.Record.SAVE_RAW)
     tmin = datetime.datetime.utcnow()
+    tmax = datetime.datetime(1970, 1, 1)
     while True:
         try:
             rec = input.next()
@@ -28,7 +29,9 @@ def ms_starttime(filename):
         if dte < tmin:
             tmin = dte
             Id = rec.streamID()
-    print(tmin.strftime("%Y-%m-%dT%H:%M:%S"))
+        if dte > tmax:
+            tmax = dte
+    return tmin.strftime("%Y-%m-%dT%H:%M:%S"), tmax.strftime("%Y-%m-%dT%H:%M:%S")
     
 if __name__ == '__main__':
     from argparse import ArgumentParser
@@ -36,4 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('filename',
                         help="Path to MiniSEED file.")
     args = parser.parse_args()
-    ms_starttime(args.filename) 
+    tmin, tmax = ms_starttime(args.filename)
+    print("%s %s" % (tmin, tmax))
+    
+
