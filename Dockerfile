@@ -79,6 +79,9 @@ RUN wget --quiet "https://github.com/conda-forge/miniforge/releases/download/${m
     fix-permissions $CONDA_DIR && \
     fix-permissions /home/sysop
 
+COPY environment.yml .
+RUN mamba env create -f environment.yml
+
 USER sysop
 WORKDIR $WORK_DIR
 
@@ -90,7 +93,7 @@ ENV SEISCOMP_ROOT=/opt/seiscomp3 PATH=/opt/seiscomp3/bin:$PATH \
     LC_ALL=C
 
 # Setup SeisComP3 + seedlink
-ADD sc3_config.cfg .
+COPY sc3_config.cfg .
 RUN seiscomp --stdin setup <sc3_config.cfg \
     && mkdir -p /opt/seiscomp3/var/lib/seedlink \
     && mkdir -p /opt/seiscomp3/var/run/seedlink \
