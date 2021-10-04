@@ -183,8 +183,9 @@ def setup_config(configdir, db):
         if os.path.isdir(newdir):
             raise PBError('Cannot backup %s: %s already exists.' %
                           (default, newdir))
-        os.rename(default, newdir)
-        os.symlink(configdir, default)
+        print("Rename %s --> %s" % (default, newdir))
+        shutil.move(default, newdir)
+        shutil.copytree(configdir, default)
 
     # scmaster's database connection can't be set on the command line so we
     # have to generate a temporary config file that sets the database
@@ -334,7 +335,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         start_module(mods.pop('seedlink'))
         start_module(mods.pop('scmaster'), '--start-stop-msg=1 --config %s' % scmaster_cfg)
         for _n, _m in mods.iteritems():
-		start_module(mods[_n],'-d "sqlite3://%s"' % database)
+		    start_module(mods[_n],'--plugins dbsqlite3,dmsm -d "sqlite3://%s"' % database)
 		#start_module(mods[_n],'--plugins dbsqlite3,evscore,dmvs,dmsm,locnll,mlh -d "sqlite3://%s"' % database)
 	# manual starts a module in debug interactive mode
 	#os.system("scfdalpine --trace --plugins dbsqlite3,dmvs,dmsm,mlh -d sqlite3://%s > /home/sysop/.seiscomp3/log/scfdalpine.log 2>&1 &" % database)
