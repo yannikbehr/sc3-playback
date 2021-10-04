@@ -1,8 +1,13 @@
-events = ['Darfield_MS_7.2', 'Darfield_AS_5.8', 'Darfield_AS_5.5']
+import os
+
+EVENTS = ['Darfield_MS_7.2', 'Darfield_AS_5.8', 'Darfield_AS_5.5',
+          'Wanaka_5.8', 'Arthurs_Pass_6.0']
+          
+DATADIR = '/home/sysop/data'
 
 rule all:
     input:
-        expand("/home/sysop/data/{event}/{event}.sqlite3", event=events)
+        expand(os.path.join(DATADIR, "{event}/temp/plotting.done"), event=EVENTS)
 
 rule waveform:
     input:
@@ -36,7 +41,7 @@ rule bindings:
     input:
         "/home/sysop/data/{event}/{event}_nocolloc.ms"
     output:
-        touch("/home/sysop/data/{event}/{event}_nocolloc_bindings/bindingstask.done"),
+        directory("/home/sysop/data/{event}/{event}_nocolloc_bindings"),
     shell:
         "./event_bindings.py {input} -r /home/sysop/data/{wildcards.event}"
         
@@ -48,11 +53,33 @@ rule database:
         "/home/sysop/data/{event}/{event}.sqlite3"
     shell:
         "./playback_db_setup.sh {wildcards.event} {input.inventory} {input.bindings}"
+
+rule config:
+    params:
+        templd=os.path.join(DATADIR, 'sc3_config_templates'),
+        configd=os.path.join(DATADIR, '{event}/dot_seiscomp3')
+    output:
+        directory(os.path.join(DATADIR, '{event}/dot_seiscomp3'))
+    shell:
+        "./gen_config.py {params.templd} {params.configd}"
         
 rule playback:
     input:
-        "/home/sysop/data/{event}/{event}_nocolloc.ms"
+        waveforms="/home/sysop/data/{event}/{event}_nocolloc.ms",
+        database="/home/sysop/data/{event}/{event}.sqlite3",
+        config=os.path.join(DATADIR, '{event}/dot_seiscomp3')
     output:
-        touch("/home/sysop/data/{event}/temp/playback.done"),
+        directory("/home/sysop/data/{event}/temp_data/")
     shell:
-        "./docker_playback.sh {wildcards.event} {input}"
+        "./rcet_playback.sh {input.waveforms} {input.database} {input.config}"
+
+rule gif:
+    input:
+        finderd=os.path.join(DATADIR, "{event}/temp_data"),
+        configd=os.path.join(DATADIR, "{event}/dot_seiscomp3")
+    params:
+        workdir=os.path.join(DATADIR,'{event}')
+    output:
+        touch(os.path.join(DATADIR, '{event}/temp/plotting.done'))
+    shell:
+        "./finder2gif --datadir {params.workdir} {input.configd}/finder_geonet.config {input.finderd}"
