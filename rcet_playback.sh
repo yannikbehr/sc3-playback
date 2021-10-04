@@ -1,5 +1,5 @@
 #!/bin/bash
-DATADIR='/home/sysop/data'
+DATADIR=""
 
 function usage(){
 cat <<EOF
@@ -7,11 +7,11 @@ Usage: $0 [Options]
 Run FinDer playback.
 
 Arguments:
-    Eventname
     Waveform-file
+    Database-file 
 Optional Arguments:
     -h, --help              Show this message.
-    --datadir               Provided alternative data directory.
+    --datadir               Provide alternative data directory.
 EOF
 }
 
@@ -34,25 +34,28 @@ done
 # Set positional parameters to the contents of POSITIONAL
 set -- "${POSITIONAL[@]}" 
 
-if [ $# -ne 2 ]; then
+if [ $# -ne 3 ]; then
     usage
     exit 1
 fi
 
-EVENT=$1
-WAVEFORMS=$2
+WAVEFORMS=$1
+DATABASE=$2
+CONFIGDIR=$3
 
-PBDIR="${DATADIR}/${EVENT}"
-DBNAME="${EVENT}.sqlite3"
-cd $PBDIR
+if [ -z $DATADIR ];then
+    DATADIR=$(dirname ${DATABASE})
+fi
+cd $DATADIR
 
-STARTTIME=$(/usr/bin/python /home/sysop/sc3-playback/ms_starttime.py ${WAVEFORMS})
+TIMES=($(/usr/bin/python /home/sysop/sc3-playback/ms_starttime.py ${WAVEFORMS}))
+STARTTIME=${TIMES[0]}
+ENDTIME=${TIMES[1]}
 /opt/seiscomp3/share/FinDer/finder_file/finder_run /home/sysop/data/finder_geonet_calcmask.config /home/sysop/data 0 0 no > finder_output.log
 cp /home/sysop/data/seedlink.ini /opt/seiscomp3/var/lib/seedlink/ 
 /usr/bin/python /home/sysop/sc3-playback/make-mseed-playback.py -u playback -I file://${WAVEFORMS} --plugins dbsqlite3 \
--d sqlite3://${DBNAME} --start "${STARTTIME}" --end "2010-09-03T17:30:00"
+-d sqlite3://${DATABASE} --start "${STARTTIME}" --end "${ENDTIME}"
 MSFILE=`ls *sorted-mseed|head -1`
-#seiscomp enable seedlink scfinder
-seiscomp enable seedlink
-/usr/bin/python /home/sysop/sc3-playback/playback.py ${DBNAME} ${MSFILE} -m realtime -c dot_seiscomp3
-
+seiscomp enable seedlink scfinder
+#seiscomp enable seedlink
+/usr/bin/python /home/sysop/sc3-playback/playback.py ${DATABASE} ${MSFILE} -m realtime -c ${CONFIGDIR}
