@@ -1,6 +1,7 @@
 #!/bin/bash
 #set -x #echo on
 DATADIR=""
+EVENT=""
 FINDERFILE=$SEISCOMP_ROOT"/share/FinDer/finder_file/finder_run"
 DENSITY=72
 
@@ -16,6 +17,8 @@ Optional Arguments:
     -h, --help              Show this message.
     --datadir               Provide alternative data directory.
 	--density				Image resolution in dpi (see convert manual).
+	--event                 Give a particular event to process. Default is
+	                        to process all events in the Finder-output-folder.
 EOF
 }
 
@@ -28,6 +31,7 @@ do
 	case "$1" in 
         --datadir) DATADIR="$2";shift;;
 		--density) DENSITY=$2;shift;;
+		--event) EVENT=$2;shift;;
 		-h) usage; exit 0;;
 		-*) usage			
 			exit 1;;
@@ -52,16 +56,22 @@ if [ -z $DATADIR ];then
 fi
 cd $DATADIR
 
-
-CONF=$(basename ${CONFIGF})_PS
-sed 's/GMT_PLOT .*/GMT_PLOT yes/' ${CONFIGF} > $CONF
-sed -i 's/DATA_FOLDER .*/DATA_FOLDER tmp_finder_gif/' $CONF
 mkdir -p tmp_finder_gif/temp
+CONF=tmp_finder_gif/$(basename ${CONFIGF})_PS
+sed 's/GMT_PLOT .*/GMT_PLOT yes/' ${CONFIGF} > $CONF
+sed -i 's/GMT_API_OPTION .*/GMT_API_OPTION no/' $CONF
+sed -i 's/GMT_PREFIX .*/GMT_PREFIX gmt/' $CONF
+sed -i 's/DATA_FOLDER .*/DATA_FOLDER tmp_finder_gif/' $CONF
 
-events=($(ls ${FINDERD}))
+if [ -z $EVENT ]; then
+	events=($(ls ${FINDERD}))
+else
+	events=($EVENT)
+fi
+
 for event in ${events[@]};do
 	rm tmp_finder_gif/temp/*ps tmp_finder_gif/temp/*jpg
-	$FINDERFILE $CONF ${FINDERD}/${event} 0 $(ls ${FINDERD}/${event}/data*|wc -l) live
+	$FINDERFILE $CONF ${FINDERD}/${event} 0 $(ls ${FINDERD}/${event}/data*|wc -l) live > finder_${event}.log 2>&1
 
 	ls -ltr tmp_finder_gif/temp/*ps| awk '{print $NF}' |while read F
 	do 
@@ -71,3 +81,4 @@ for event in ${events[@]};do
 	-density $DENSITY $( ls -ltr tmp_finder_gif/temp/*jpg| awk '{print $NF}' ) \
 	${FINDERD}/${event}.gif     
 done
+
