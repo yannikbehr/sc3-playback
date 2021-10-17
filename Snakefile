@@ -1,77 +1,92 @@
 import os
 
 EVENTS = ['Darfield_MS_7.2', 'Darfield_AS_5.8', 'Darfield_AS_5.5',
-          'Wanaka_5.8', 'Arthurs_Pass_6.0']
+          'Wanaka_5.8', 'Arthurs_Pass_6.0', 'Kaikoura_MS_7.8']
           
 DATADIR = '/home/sysop/data'
 
 rule all:
     input:
-        expand(os.path.join(DATADIR, "{event}/temp/plotting.done"), event=EVENTS)
+        expand(os.path.join(DATADIR, "{event}/.plotting.done"), event=EVENTS)
 
 rule waveform:
     input:
-        "/home/sysop/data/{event}/{event}.json"
+        os.path.join(DATADIR, "{event}/{event}.json")
     output:
-        "/home/sysop/data/{event}/{event}.ms"
+        os.path.join(DATADIR, "{event}/{event}_raw.ms")
     shell:
-        "./waveformdl.py -e {input} -o /home/sysop/data/{wildcards.event}"
+        "./waveformdl.py -e {input} {output}"
         
 rule inventory:
     input:
-        inv="/home/sysop/data/complete.xml",
-        wave="/home/sysop/data/{event}/{event}.ms"
+        inv=os.path.join(DATADIR, "complete.xml"),
+        wave=os.path.join(DATADIR, "{event}/{event}_raw.ms")
     output:
-        "/home/sysop/data/{event}/{event}.xml"
+        os.path.join(DATADIR, "{event}/{event}.xml")
     shell:
         "./event_inventory.py {input.wave} -i {input.inv} "
         "> {output}"
 
 rule select:
     input:
-        inv="/home/sysop/data/{event}/{event}.xml",
-        wave="/home/sysop/data/{event}/{event}.ms"
+        inv=os.path.join(DATADIR, "{event}/{event}.xml"),
+        wave=os.path.join(DATADIR, "{event}/{event}_raw.ms")
     output:
-        "/home/sysop/data/{event}/{event}_nocolloc.ms"
+        os.path.join(DATADIR, "{event}/{event}.ms")
     shell:
-        "./select_traces.py {input.wave} -i {input.inv}" 
+        "./select_traces.py {input.wave} -i {input.inv} -p -c -t" 
         "> {output}"
        
 rule bindings:
     input:
-        "/home/sysop/data/{event}/{event}_nocolloc.ms"
+        os.path.join(DATADIR, "{event}/{event}.ms")
     output:
-        directory("/home/sysop/data/{event}/{event}_nocolloc_bindings"),
+        directory(os.path.join(DATADIR, "{event}/{event}_bindings")),
     shell:
         "./event_bindings.py {input} -r /home/sysop/data/{wildcards.event}"
         
 rule database:
     input:
-        bindings="/home/sysop/data/{event}/{event}_nocolloc_bindings/",
-        inventory="/home/sysop/data/{event}/{event}.xml"
+        bindings=os.path.join(DATADIR, "{event}/{event}_bindings/"),
+        inventory=os.path.join(DATADIR, "{event}/{event}.xml")
     output:
-        "/home/sysop/data/{event}/{event}.sqlite3"
+        os.path.join(DATADIR, "{event}/{event}.sqlite3")
     shell:
         "./playback_db_setup.sh {wildcards.event} {input.inventory} {input.bindings}"
 
 rule config:
+    input:
+        os.path.join(DATADIR, '{event}/{event}.xml')
     params:
         templd=os.path.join(DATADIR, 'sc3_config_templates'),
         configd=os.path.join(DATADIR, '{event}/dot_seiscomp3')
     output:
         directory(os.path.join(DATADIR, '{event}/dot_seiscomp3'))
     shell:
-        "./gen_config.py {params.templd} {params.configd}"
+        "./gen_config.py {input} {params.templd} {params.configd}"
         
 rule playback:
     input:
-        waveforms="/home/sysop/data/{event}/{event}_nocolloc.ms",
-        database="/home/sysop/data/{event}/{event}.sqlite3",
+        waveforms=os.path.join(DATADIR, "{event}/{event}.ms"),
+        database=os.path.join(DATADIR, "{event}/{event}.sqlite3"),
         config=os.path.join(DATADIR, '{event}/dot_seiscomp3')
     output:
-        directory("/home/sysop/data/{event}/temp_data/")
+        directory(os.path.join(DATADIR, "{event}/temp_data/")),
+        directory(os.path.join(DATADIR, "{event}/temp/")),
+        os.path.join(DATADIR, '{event}/temp/calculated_mask.nc')
     shell:
         "./rcet_playback.sh {input.waveforms} {input.database} {input.config}"
+
+rule plotmask:
+    input:
+        mask=os.path.join(DATADIR, '{event}/temp/calculated_mask.nc'),
+        inventory=os.path.join(DATADIR, "{event}/{event}.xml")
+    params:
+        outdir=os.path.join(DATADIR, '{event}')
+    output:
+        os.path.join(DATADIR, '{event}/finder_mask.png')
+    shell:
+        "./plot_mask.py {input.mask} {input.inventory} {params.outdir}"
 
 rule gif:
     input:
@@ -80,6 +95,7 @@ rule gif:
     params:
         workdir=os.path.join(DATADIR,'{event}')
     output:
-        touch(os.path.join(DATADIR, '{event}/temp/plotting.done'))
+        directory(os.path.join(DATADIR, '{event}', 'tmp_finder_gif')),
+        touch(os.path.join(DATADIR, '{event}/.plotting.done'))
     shell:
         "./finder2gif --datadir {params.workdir} {input.configd}/finder_geonet.config {input.finderd}"
