@@ -9,7 +9,6 @@
 shopt -s expand_aliases
 
 IMAGE=finder_rcet
-CONTAINER=finder_test
 TAG=0.0.1
 BUILD=false
 PUSH=false
@@ -72,15 +71,10 @@ if [ "${INTERACTIVE}" == "true" ]; then
 fi
 
 if [ "${SSHD}" == "true" ]; then
-    docker stop $CONTAINER
-    docker rm $CONTAINER
-    docker run -it --name $CONTAINER -u root -p 8022:22 \
-    # --link seiscomp3:postgres_db \
-    -v /geonet/seismic:/home/sysop/sds \
-    -v $PWD/dot_seiscomp3:/home/sysop/.seiscomp3 \
-    -v $PWD/data:/home/sysop/data \
-    -v $PWD/sc3-playback:/home/sysop/sc3-playback \
-    $IMAGE
+    docker run -it --rm -u root -p 8022:22 \
+    -v $RCET_DATA:/home/sysop/data \
+    -v $PWD:/home/sysop/sc3-playback \
+    $IMAGE:${TAG}
 fi
 
 
