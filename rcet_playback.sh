@@ -9,6 +9,7 @@ Run FinDer playback.
 Arguments:
     Waveform-file
     Database-file 
+    Config-dir
 Optional Arguments:
     -h, --help              Show this message.
     --datadir               Provide alternative data directory.
@@ -51,8 +52,8 @@ cd $DATADIR
 TIMES=($(/usr/bin/python /home/sysop/sc3-playback/ms_starttime.py ${WAVEFORMS}))
 STARTTIME=${TIMES[0]}
 ENDTIME=${TIMES[1]}
-/opt/seiscomp3/share/FinDer/finder_file/finder_run /home/sysop/data/finder_geonet_calcmask.config /home/sysop/data 0 0 no > finder_output.log
-cp /home/sysop/data/seedlink.ini /opt/seiscomp3/var/lib/seedlink/ 
+/opt/seiscomp3/share/FinDer/finder_file/finder_run ${CONFIGDIR}/finder_geonet_calcmask.config ${CONFIGDIR} 0 0 no > finder_output.log
+cp ${CONFIGDIR}/seedlink.ini /opt/seiscomp3/var/lib/seedlink/ 
 /usr/bin/python /home/sysop/sc3-playback/make-mseed-playback.py -u playback -I file://${WAVEFORMS} --plugins dbsqlite3 \
 -d sqlite3://${DATABASE} --start "${STARTTIME}" --end "${ENDTIME}"
 MSFILE=`ls *sorted-mseed|head -1`
