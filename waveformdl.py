@@ -36,7 +36,7 @@ def myhash(args, kwds):
 
 class EventData:
 
-    def __init__(self, event, savedir='/tmp', radius=2.):
+    def __init__(self, event):
         """
         Parameters:
         -----------
@@ -54,22 +54,18 @@ class EventData:
         """
         self.client = FDSN_Client(base_url='http://service.geonet.org.nz',
                                   debug=False)
-        preevent = int(event['preevent time'])
-        postevent = int(event['postevent time'])
+        preevent = event['preevent time']
+        postevent = event['postevent time']
         self.t1 = UTCDateTime(event['time']) - preevent 
         self.t2 = UTCDateTime(event['time']) + postevent 
         logging.debug('Starttime: %s; Endtime: %s', self.t1, self.t2)
         self.latitude = event['lat']
         self.longitude = event['lon']
-        self.radius = radius
+        self.radius = event.get('radius', 2.)
         self.inv = self.get_inventory(['HHZ','HNZ', 'HHE',
                                        'HHN', 'HNE', 'HNN',
                                        'HN1', 'HN2', 'HH1',
                                        'HH2'])
-        if not os.path.isdir(savedir):
-            logging.info("Creating download directory \n {:s}".format(savedir))
-            os.makedirs(savedir)
-        self.filename = os.path.join(savedir, event['name']+'.ms')
 
     @cachier(stale_after=timedelta(hours=1),
              cache_dir='/tmp/.cache', hash_params=myhash)
@@ -82,7 +78,7 @@ class EventData:
                                        level=level)
         return inv
 
-    def get_waveforms(self, rmresponse=False, rmsensitivity=True):
+    def get_waveforms(self, fout, rmresponse=False, rmsensitivity=False):
 
         logging.info("Starting waveform requests")
         stmain = Stream()
@@ -111,7 +107,7 @@ class EventData:
                    except Exception as e:
                         logging.warning(e)
                         continue
-        stmain.write(self.filename, format='MSEED')
+        stmain.write(fout, format='MSEED')
 
 
 def test_inventory():
@@ -140,12 +136,11 @@ if __name__ == '__main__':
     import json
     parser = ArgumentParser(prog='event_data',
                             description=__doc__.strip())
+    parser.add_argument('fout', type=str,
+                        help='Name of the output file.')
     parser.add_argument('-e', '--events', type=str,
                         default='Darfield',
                         help='Name of event or json file with event data.')
-    parser.add_argument('-o', '--outdir', type=str,
-                        default='/tmp',
-                        help='Directory to write waveform files to.')
     args = parser.parse_args()
     try:
         with open(args.events, 'r') as fh:
@@ -154,5 +149,5 @@ if __name__ == '__main__':
     except FileNotFoundError:
         events = eval(args.events)
     for event in events:
-        ed = EventData(event, savedir=args.outdir)
-        ed.get_waveforms(rmsensitivity=False)
+        ed = EventData(event)
+        ed.get_waveforms(args.fout)
