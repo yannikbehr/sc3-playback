@@ -583,7 +583,7 @@ then
 	echo "Running playback ..."
 	echo cp ${PBDIR}/${PBDB%\.*}_no_event.sqlite ${PBDIR}/${PBDB}
 	cp "${PBDIR}/${PBDB%\.*}_no_event.sqlite" "${PBDIR}/${PBDB}"	
-	
+
 	# make space for new logs
 	mkdir -p ${PBDIR}/seiscomp3/log
 	ls ${PBDIR}/seiscomp3/* &>/dev/null && rm -r ${PBDIR}/seiscomp3/*
@@ -594,6 +594,9 @@ then
 	seiscomp enable seedlink
 	sed -i 's;plugins\.mseedfifo\.fifo.*;plugins.mseedfifo.fifo = '${SEISCOMP_ROOT}'/var/run/seedlink/mseedfifo;' ${CONFIGDIR}/global.cfg
 	grep "plugins.mseedfifo.fifo" ${CONFIGDIR}/global.cfg
+	
+	# Clean FinDer logs
+	ls ${SEISCOMP_ROOT}/share/FinDer/output/ && rm -r ${SEISCOMP_ROOT}/share/FinDer/output/*
 	
 	# run the playback
 	cp "${PBDIR}/${PBDB}" tmp.sqlite
@@ -634,6 +637,11 @@ then
 		--include "*cfg" --exclude="*" \
 		${SEISCOMP_ROOT}/etc/ ${PBDIR}/seiscomp_root-etc/
 	# save the logs
+	ls ${SEISCOMP_ROOT}/share/FinDer && rsync -avzl --delete \
+		--include="*/" \
+		--include="finder*.config" --include="data_?" --include="data_??" \
+		--exclude="*" \
+		${SEISCOMP_ROOT}/share/FinDer/ ${PBDIR}/FinDer/
 	rsync -avzl ${CONFIGDIR}/  ${PBDIR}/seiscomp3/ \
 		--exclude="sc*v.cfg" \
 		--exclude="*logbu*" \
