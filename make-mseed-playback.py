@@ -2,9 +2,10 @@
 
 import sys, time, traceback
 import seiscomp3.Client, seiscomp3.DataModel
-import re
+import re, math
 
-stream_whitelist = ["HH", "EH", "HG", "HN"]
+max_station_distance_km = 300 
+stream_whitelist = ["HH", "EH", "SH", "HG", "HN", "EN", "EG","SN"]
 component_whitelist = []  # set to ["Z"] for vertical component only
 network_blacklist = ["DK"]
 network_whitelist = []  # all except blacklist
@@ -14,6 +15,18 @@ before, after = 60, 120
 regex = re.compile('/')
 sort = True  # will produce sorted files with ".sorted-mseed" extension
 
+def haversine(lon1, lat1, lon2, lat2):
+    # convert decimal degrees to radians
+    print([lon1, lat1, lon2, lat2])
+    lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
+
+    # haversine formula
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371 # Radius of earth in meters. Use 3956 for miles
+    return c * r
 
 def filterStreams(streams):
     # NOTE that the criteria here are quite application dependent:
@@ -30,7 +43,7 @@ def filterStreams(streams):
     return filtered
 
 
-def getCurrentStreams(dbr, now=None):
+def getCurrentStreams(dbr, now=None, org=None, radius=max_station_distance_km):
     if now is None:
         now = seiscomp3.Core.Time.GMT()
     inv = seiscomp3.DataModel.Inventory()
@@ -58,6 +71,16 @@ def getCurrentStreams(dbr, now=None):
                     continue
             except:
                 pass
+
+            if org is not None:
+                haversine_inputs=[station.longitude(),
+                                  station.latitude(),
+                                  org.longitude().value(),
+                                  org.latitude().value()]
+                ep_dist = haversine(*haversine_inputs)
+                if ep_dist > radius:
+                    print('skip %s.%s (%s > %s)'%(network.code(), station.code(), ep_dist, radius))
+                    continue
 
             # now we know that this is an operational station
 
@@ -100,6 +123,7 @@ class DumperApp(seiscomp3.Client.Application):
             try:
                 self.commandline().addGroup("Dump")
                 self.commandline().addStringOption("Dump", "event,E", "ID of event to dump")
+                self.commandline().addStringOption("Dump", "radius,R", "Maximum event radius within to dump stations")
                 self.commandline().addStringOption("Dump", "start", "Start time")
                 self.commandline().addStringOption("Dump", "end", "End time")
 
@@ -110,9 +134,9 @@ class DumperApp(seiscomp3.Client.Application):
             info = traceback.format_exception(*sys.exc_info())
             for i in info: sys.stderr.write(i)
 
-    def get_and_write_data(self, t1, t2, out):
+    def get_and_write_data(self, t1, t2, out, org=None, radius = max_station_distance_km):
         dbr = seiscomp3.DataModel.DatabaseReader(self.database())
-        streams = getCurrentStreams(dbr, t1)
+        streams = getCurrentStreams(dbr, t1, org, radius)
 
         # split all streams into groups of same net
         netsta_streams = {}
@@ -121,7 +145,7 @@ class DumperApp(seiscomp3.Client.Application):
             if not netsta in netsta_streams:
                 netsta_streams[netsta] = []
             netsta_streams[netsta].append((net, sta, loc, cha))
-
+        print(netsta_streams)
         data = []
         netsta_keys = netsta_streams.keys()
         netsta_keys.sort()
@@ -175,7 +199,7 @@ class DumperApp(seiscomp3.Client.Application):
                 previous = raw
 
 
-    def dump(self, eventID, start=None, end=None):
+    def dump(self, eventID, start=None, end=None, radius = max_station_distance_km):
         if start and end:
             try:
                 filename = start.toString("%FT%T")
@@ -219,7 +243,8 @@ class DumperApp(seiscomp3.Client.Application):
             t0 = org.time().value()
             t1, t2 = t0 + seiscomp3.Core.TimeSpan(-before), t0 + seiscomp3.Core.TimeSpan(after)
 
-            self.get_and_write_data(t1, t2, out)
+            self.get_and_write_data(t1, t2, out, org, radius)
+            print(t1,t0,t2)
             return True
 
         except:
@@ -231,6 +256,9 @@ class DumperApp(seiscomp3.Client.Application):
         try:
             if self.commandline().hasOption("unsorted"):
                 sort = False
+            radius = max_station_distance_km
+            if self.commandline().hasOption("radius"):
+                radius = float(self.commandline().optionString("radius"))
             if self.commandline().hasOption('start') and self.commandline().hasOption('end'):
                 startstring = self.commandline().optionString('start')
                 starttime = seiscomp3.Core.Time.FromString(startstring, "%FT%T")
@@ -240,7 +268,7 @@ class DumperApp(seiscomp3.Client.Application):
                     return False
             elif self.commandline().hasOption("event"):
                 evid = self.commandline().optionString("event")
-                if not self.dump(evid):
+                if not self.dump(evid,radius=radius):
                     return False
             else:
                 sys.stderr.write("Either --start and --end or --event need to be provided.")
