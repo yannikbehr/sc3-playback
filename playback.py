@@ -12,20 +12,22 @@ import datetime
 import glob
 import imp
 import os
-import pipes
 import shutil
-import signal
 import subprocess as sp
-import subprocess
 import shutil
 import sys
-import tempfile
 import time
 import traceback
-import uuid
-from seiscomp3 import Config, System
-import seiscomp3.Kernel
-import seiscomp3.IO
+import importlib
+import seiscomp._config
+import seiscomp.config
+import seiscomp.system
+import seiscomp.kernel
+import seiscomp.io
+
+
+INIT_PATH = os.path.join(os.environ.get('SEISCOMP_ROOT', '/opt/seiscomp'),
+                         'etc', 'init')
 
 
 class PBError(Exception):
@@ -53,7 +55,7 @@ def start_module(mod, params=''):
 def touch(filename):
     try:
         open(filename, 'w').close()
-    except Exception, exc:
+    except Exception as exc:
         PBError(str(exc))
 
 
@@ -64,10 +66,7 @@ def system(args):
             return proc.wait()
         except KeyboardInterrupt:
             continue
-        except Exception, e:
-            # Terminate was introduced in Python 2.6
-            tb = traceback.format_exc()
-            sys.stderr.write("Exception: %s" % tb)
+        except Exception as e:
             try:
                 proc.terminate()
             except:
@@ -81,64 +80,55 @@ def load_module(path):
     Returns a seiscomp3.Kernel.Module instance from a given path with
     a given name
     """
-    modname = os.path.splitext(os.path.basename(path))[0].replace('.', '_')
-    f = open(path, 'r')
-    modname = '__seiscomp_modules_' + modname
-    if sys.modules.has_key(modname):
+    modname0 = os.path.splitext(os.path.basename(path))[0].replace('.', '_')
+    modname = '__seiscomp_modules_' + modname0
+    if modname in sys.modules:
         mod = sys.modules[modname]
     else:
-        # create a module
-        mod = imp.new_module(modname)
+        if sys.path[0] != INIT_PATH:
+            sys.path.insert(0, INIT_PATH)
+        mod = importlib.import_module(modname0)
         mod.__file__ = path
 
-    # store it in sys.modules
-    sys.modules[modname] = mod
+        # store it in sys.modules
+        sys.modules[modname] = mod
 
-    # our namespace is the module dictionary
-    namespace = mod.__dict__
-
-    # test whether this has been done already
-    if not hasattr(mod, 'Module'):
-        code = f.read()
-        # compile and exec dynamic code in the module
-        exec compile(code, '', 'exec') in namespace
-    module = namespace.get('Module')
+        module = mod.Module
     return module
 
 
-def module_compare(a, b):
-    if a.order < b.order:
-        return -1
-    if a.order > b.order:
-        return 1
-    if a.name < b.name:
-        return -1
-    if a.name > b.name:
-        return 1
-    return 0
+def module_key(module):
+    return (module.order, module.name)
 
 
 def load_init_modules(path):
-    mods = []
+    modules = []
+
+    if not os.path.exists(path):
+        error("Cannot load any module - path not existing: %s" % path)
+        return modules
 
     files = glob.glob(os.path.join(path, "*.py"))
     for f in files:
         try:
             pmod = load_module(f)
-        except Exception, exc:
+        except Exception as exc:
             error(("%s: " % f) + str(exc))
             continue
 
         try:
-            mod = pmod(env)
-        except Exception, exc:
+            mod = pmod(env)  # .Module(env)
+        except Exception as exc:
             error(("%s: " % f) + str(exc))
             continue
 
-        mods.append(mod)
-    mods = sorted(mods, cmp=module_compare)
-    return mods
-###############################################################################
+        modules.append(mod)
+
+    #mods = sorted(mods, key=lambda mod: mod.order)
+    modules = sorted(modules, key=module_key)
+
+    return modules
+##############################################################################
 
 
 def setup_seedlink(fifofn):
@@ -166,25 +156,23 @@ def setup_config(configdir, db):
     default = ei.configDir()
     print(default)
     if configdir == default:
-        print('default conf dir')
         pass
     elif os.path.islink(default):
         # default configuration directory is already a link so it's
         # save to remove it without backup
-        print('linked default conf dir')
         os.unlink(default)
         os.symlink(configdir, default)
     elif os.path.isdir(default):
         # default configuration directory is a regular directory so we
         # back it up
-        print('spec conf dir')
         d = datetime.datetime.now().strftime("%Y%j%H%M%S")
         newdir = '_'.join((default, d, 'backup'))
         if os.path.isdir(newdir):
             raise PBError('Cannot backup %s: %s already exists.' %
                           (default, newdir))
-        os.rename(default, newdir)
-        os.symlink(configdir, default)
+        print("Rename %s --> %s" % (default, newdir))
+        shutil.move(default, newdir)
+        shutil.copytree(configdir, default)
 
     # scmaster's database connection can't be set on the command line so we
     # have to generate a temporary config file that sets the database
@@ -192,32 +180,16 @@ def setup_config(configdir, db):
     # tmp_config = tempfile.NamedTemporaryFile()
     # tmp_config.close()
     tmp_config = '/tmp/scmaster_tmp.cfg'
-    cfg_tmp = Config.Config()
-    cfg = Config.Config()
-    ei.initConfig(cfg, 'scmaster')
-    for cfg_entry in ['msgGroups']:
-        cfg_tmp.setStrings(cfg_entry, cfg.getStrings(cfg_entry))
-    try:
-        s = cfg.getStrings('plugins')
-    except:
-        # no plugins set
-        cfg_tmp.setString('plugins', 'dbplugin')
-    else:
-        it = s.begin()
-        found = False
-        while it != s.end():
-            pi = it.next()
-            if pi == 'dbplugin':
-                found = True
-        if not found:
-            s.append('dbplugin')
-        cfg_tmp.setStrings('plugins', s)
-    cfg_tmp.setString('core.plugins', 'dbsqlite3')
-    cfg_tmp.setString('plugins.dbPlugin.dbDriver', 'sqlite3')
-    cfg_tmp.setString('plugins.dbPlugin.readConnection', db)
-    cfg_tmp.setString('plugins.dbPlugin.writeConnection', db)
-    cfg_tmp.setString('admin.adminname', '')
-    cfg_tmp.setString('admin.password', '')
+    cfg = seiscomp.config.Config()
+    cfg.readConfig(os.path.join(default, 'scmaster.cfg'))
+    params = dict([(x, cfg.getStrings(x)) for x in cfg.names()])
+    cfg_tmp = seiscomp.config.Config()
+    for k, v in params.items():
+        cfg_tmp.setStrings(k, v)
+    cfg_tmp.setString('queues.production.processors.messages.dbstore.driver', 'sqlite3')
+    cfg_tmp.setString('queues.production.processors.messages.dbstore.read', db)
+    cfg_tmp.setString('queues.production.processors.messages.dbstore.write', db)
+    cfg_tmp.setString('logging.level', '4')
     cfg_tmp.writeConfig(tmp_config)
     return tmp_config
 
@@ -233,7 +205,7 @@ def get_enabled_modules(exclude=[]):
     for _m in mods:
         if _m.name in exclude:
             continue
-        if isinstance(_m, seiscomp3.Kernel.CoreModule):
+        if isinstance(_m, seiscomp.kernel.CoreModule):
             startup_modules[_m.name] = _m
         elif env.isModuleEnabled(_m.name):
             startup_modules[_m.name] = _m
@@ -246,9 +218,9 @@ def get_start_time(fn):
     """
     Find the earliest end-time of all records in the waveform file.
     """
-    stream = seiscomp3.IO.RecordStream.Open('file://%s' % fn)
-    input = seiscomp3.IO.RecordInput(stream, seiscomp3.Core.Array.INT,
-                                     seiscomp3.Core.Record.SAVE_RAW)
+    stream = seiscomp.io.RecordStream.Open('file://%s' % fn)
+    input = seiscomp.io.RecordInput(stream, seiscomp.core.Array.INT,
+                                     seiscomp.core.Record.SAVE_RAW)
     tmin = datetime.datetime.utcnow()
     while True:
         try:
@@ -287,7 +259,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
     setup_seedlink(fifo)
 
     # construct msrtsimul command
-    command = ["seiscomp", "exec", 
+    command = ["seiscomp", "exec",
     os.path.dirname(os.path.realpath(__file__))+"/msrtsimul.py"]
     if speed is not None:
         command += ["-s", speed]
@@ -318,7 +290,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
             t0 = get_start_time(wf)
             command += ['-t', str(t0)]
             t0 -= datetime.timedelta(seconds=startupdelay)
-            print "Start time %s" % t0
+            print("Start time %s" % t0)
             # /usr/lib/faketime/libfaketime.so.1'
             os.environ[
                 'LD_PRELOAD'] = '/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1'
@@ -330,11 +302,10 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
             ts = time.time()
             startupdelay = 0
         start_module(mods.pop('kernel'))
-        start_module(mods.pop('spread'))
         start_module(mods.pop('seedlink'))
         start_module(mods.pop('scmaster'), '--start-stop-msg=1 --config %s' % scmaster_cfg)
-        for _n, _m in mods.iteritems():
-		start_module(mods[_n],'-d "sqlite3://%s"' % database)
+        for _n, _m in mods.items():
+            start_module(mods[_n],'--plugins dbsqlite3,dmsm -d "sqlite3://%s"' % database)
 		#start_module(mods[_n],'--plugins dbsqlite3,evscore,dmvs,dmsm,locnll,mlh -d "sqlite3://%s"' % database)
 	# manual starts a module in debug interactive mode
 	#os.system("scfdalpine --trace --plugins dbsqlite3,dmvs,dmsm,mlh -d sqlite3://%s > /home/sysop/.seiscomp3/log/scfdalpine.log 2>&1 &" % database)
@@ -356,7 +327,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         if eventfile is not None:
             system(dispatch_cmd)
         system(['seiscomp', 'stop'])
-    except Exception, e:
+    except Exception as e:
         tb = traceback.format_exc()
         sys.stderr.write("Exception: %s" % tb)
         sys.stderr.write("Exception: %s\n" % str(e))
@@ -365,8 +336,8 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
 
 if __name__ == '__main__':
     import argparse
-    ei = System.Environment.Instance()
-    env = seiscomp3.Kernel.Environment(ei.installDir())
+    ei = seiscomp.system.Environment.Instance()
+    env = seiscomp.kernel.Environment(ei.installDir())
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('database', help='Absolute path to an sqlite3 \
@@ -402,6 +373,6 @@ if __name__ == '__main__':
         run(args.waveforms, args.database, args.config_dir, args.fifo,
             speed=args.speed, jump=args.jump, delays=args.delays,
             mode=args.mode, eventfile=args.events)
-    except PBError, e:
-        print e
+    except PBError as e:
+        print(e)
         sys.exit()
