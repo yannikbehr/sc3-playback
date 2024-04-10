@@ -157,7 +157,7 @@ def setup_seedlink(fifofn):
                 shutil.rmtree(dname)
     # check whether the fifo file exists
     if not os.path.exists(fifofn):
-        raise PBError('%s does not exist.' % fifofn)
+        raise PBError('fifo %s does not exist.' % fifofn)
     if not os.path.stat.S_ISFIFO(os.stat(fifofn).st_mode):
         raise PBError('%s is not a fifo file.' % fifofn)
 
@@ -273,9 +273,9 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
     Start SeisComP3 modules and the waveform playback.
     """
     if not os.path.isfile(wf):
-        raise PBError('%s does not exist.' % wf)
+        raise PBError('Data %s does not exist.' % wf)
     if not os.path.isdir(config_dir):
-        raise PBError('%s does not exist.' % config_dir)
+        raise PBError('Config %s does not exist.' % config_dir)
     system(['seiscomp', 'stop'])
 #    tmpfile = "/tmp/%s" % uuid.uuid4()
 #    print("/usr/local/bin/qmerge -b 512 -o %s %s" %(tmpfile,wf))
@@ -299,7 +299,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
     # Construct scdispatch command
     if eventfile is not None:
         if not os.path.isfile(eventfile):
-            raise PBError('%s does not exist' % eventfile)
+            raise PBError('Eventxml %s does not exist' % eventfile)
         dispatch_cmd = ['seiscomp', 'exec', 'scdispatch']
         dispatch_cmd += ['-i', eventfile, '-O', 'add']
         # if we run in historic mode merge origins
@@ -334,8 +334,11 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
         start_module(mods.pop('seedlink'))
         start_module(mods.pop('scmaster'), '--start-stop-msg=1 --config %s' % scmaster_cfg)
         for _n, _m in mods.iteritems():
-		start_module(mods[_n],'--plugins dbsqlite3,evscore,dmvs,dmsm,locnll,mlh -d "sqlite3://%s"' % database)
+		start_module(mods[_n],'-d "sqlite3://%s"' % database)
+		#start_module(mods[_n],'--plugins dbsqlite3,evscore,dmvs,dmsm,locnll,mlh -d "sqlite3://%s"' % database)
 	# manual starts a module in debug interactive mode
+	#os.system("scfdalpine --trace --plugins dbsqlite3,dmvs,dmsm,mlh -d sqlite3://%s > /home/sysop/.seiscomp3/log/scfdalpine.log 2>&1 &" % database)
+	#os.system("scfdforela --trace --plugins dbsqlite3,dmvs,dmsm,mlh -d sqlite3://%s > /home/sysop/.seiscomp3/log/scfdforela.log 2>&1 &" % database)
 	#os.system('scfinder --trace --plugins dbsqlite3,dmvs,dmsm,mlh -d sqlite3://%s &> /home/sysop/.seiscomp3/log/scfinder.log &' % database)
 	#os.system('scm --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
 	#os.system('scmm --plugins dbsqlite3,dmvs,dmsm,mlh -d "sqlite3://%s" &' % database)
@@ -344,7 +347,7 @@ def run(wf, database, config_dir, fifo, speed=None, jump=None, delays=None,
 
         command.append(wf)
 
-        print('Executing: %s', command)
+        #print('Executing: %s', command)
         system(command)
         if eventfile is not None:
             system(dispatch_cmd)
