@@ -186,6 +186,7 @@ def setup_config(configdir, db):
     cfg_tmp = seiscomp.config.Config()
     for k, v in params.items():
         cfg_tmp.setStrings(k, v)
+    cfg_tmp.setString('core.plugins', 'dbsqlite3')
     cfg_tmp.setString('queues.production.processors.messages.dbstore.driver', 'sqlite3')
     cfg_tmp.setString('queues.production.processors.messages.dbstore.read', db)
     cfg_tmp.setString('queues.production.processors.messages.dbstore.write', db)
